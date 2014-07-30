@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
-# find available GOOGLE IP
+# search the public IPs from Internet.
 
 import urllib
 import os
@@ -163,45 +163,106 @@ def detecting(dic_ips, area_sorted_list):
 
 
 def nslookup():
-    # find ip by nslookup
     # https://support.google.com/a/answer/60764?hl=zh-Hans
     # nslookup -q=TXT _spf.google.com 8.8.8.8
     # nslookup -q=TXT _netblocks.google.com 8.8.8.8
     # nslookup -q=TXT _netblocks2.google.com 8.8.8.8
     # nslookup -q=TXT _netblocks3.google.com 8.8.8.8
-    spf = 'nslookup -q=TXT _spf.google.com 8.8.8.8'
-    p = subprocess.Popen(
-        spf, stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
-    out = p.stdout.read()
-    print out
-    # pattern = re.compile(
-    #   "Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms", re.IGNORECASE)
-    #pattern = re.compile(r'\s=\s(\d+)ms', re.I)
-    #m = pattern.findall(out)
-    # print out
-    # if m and len(m) == 3:
-    #    g_ping_resoult[ip]=int(m[2])
 
-    # if len(g_ping_resoult) >=5
+    print "-> Query Google's SPF record to retrieve the range of IP address..."
+    # Try 5 times to retrieve the SPF records
+    spf = 'nslookup -q=TXT _spf.google.com 8.8.8.8'
+    domain = []
+    for i in range(5):
+        p = subprocess.Popen(
+            spf, stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
+        out = p.stdout.read()
+        # print out
+        res = re.findall(r'~all', out)
+        if not res:
+            print '-> Timeout(%s),try again...' % i
+            continue
+        else:
+            s = re.search(r'".+"', out).group()
+            arr = s.split(' ')[1:-1]
+            for txt in arr:
+                domain.append(txt.split(':')[1])
+            print "-> Recieve the list of the domains included in Google's SPF record:"
+            print domain
+            break
+    if len(domain) == 0:
+        print '-> Damn it, nslookup timeout. We get nothing!'
+        return None
+    print '-> Query IP range...'
+    # get IP range
+    res = ''
+    for d in domain:
+        cmd = 'nslookup -q=TXT %s 8.8.8.8' % d
+        for j in range(5):
+            p = subprocess.Popen(
+                cmd, stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
+            out = p.stdout.read()
+            if '~all' not in out:
+                continue
+            if 'ip4' in out:
+                res = re.search(r'".+"', out).group()
+                break
+            else:
+                break
+        if len(res) > 0:
+            break
+
+    if len(res) == 0:
+        print '-> Damn it, nslookup timeout. We get nothing!'
+        return None
+
+    arr = res.split(' ')[1:-1]
+    arr2 = []
+    for txt in arr:
+        arr2.append(txt.split(':')[1])
+    del arr[:]
+    ip_list = []
+    print '-> Receive IP range:'
+    print arr2
+    for txt in arr2:
+        arr = re.search(r'\d+/\d+', txt).group().split('/')
+        if arr[0] == '0':
+            arr[0] = 1
+        arr[1] = int(arr[1])+1
+        ip3 = re.search(r'\d+\.\d+\.\d+\.', txt).group()
+        for ip4 in range(arr[0], arr[1]):
+            ip_list.append(ip3+str(ip4))
+    print '-> Change to IP list:'
+    print ip_list
+    # Write to file
+    f = open(os.path.join(os.getcwd(), 'nslookup.ip'), 'w')
+    try:
+        f.writelines('\n'.join(ip_list))
+    except:
+        pass
+    finally:
+        f.close()
+
 
 nslookup()
 
-#area_weight = '''Korea=8
-#Singapore=8
-#Egypt=5
-#Iceland=5
-#Philippines=7
-#Indonesia=7
-#Serbia=5
-#Mauritius=5
-#Netherlands
-#Slovakia=5
-#Kenya=5
-#Japan=9
-#Taiwan=8
-#Iraq=5
-#Norway=5
-#Russia=5
-#Thailand=7
-#Bulgaria=5'''
+# area_weight = '''Korea=8
+# Singapore=8
+# Egypt=5
+# Iceland=5
+# Philippines=7
+# Indonesia=7
+# Serbia=5
+# Mauritius=5
+# Netherlands
+# Slovakia=5
+# Kenya=5
+# Japan=9
+# Taiwan=8
+# Iraq=5
+# Norway=5
+# Russia=5
+# Thailand=7
+# Bulgaria=5'''
