@@ -37,7 +37,7 @@ def get_ips():
                 # add to dictionary
                 if len(key) > 0 and len(lst) > 0:
                     print 'area = %s, total IPs = %s' % (key, len(lst))
-                    # merge the IP list for existed-area-key in dictionary
+                    # merge the IP list for existed-area-key in dictionay
                     if key in dic.keys():
                         lst.extend(dic[key])
                     dic[key] = lst
@@ -70,26 +70,6 @@ def get_ips():
         f.close()
 
 
-area_weight = '''Korea=8
-Singapore=8
-Egypt=5
-Iceland=5
-Philippines=7
-Indonesia=7
-Serbia=5
-Mauritius=5
-Netherlands
-Slovakia=5
-Kenya=5
-Japan=9
-Taiwan=8
-Iraq=5
-Norway=5
-Russia=5
-Thailand=7
-Bulgaria=5'''
-
-
 def sort_area():
     arr = area_weight.split('\n')
     lst = list()
@@ -106,7 +86,7 @@ def sort_area():
     return lst
 
 
-def th_port_detect():
+def port_detect():
     while True:
         ip = get_one_ip()
         if ip is None:
@@ -123,15 +103,10 @@ def th_port_detect():
                 alive_list.append(ip)
                 # Save available IPs to file, in case program is aborted by
                 # user in anytime
-                if len(alive_list) >= 5:
-                    g_mutex.acquire()
-                    # double check
-                    if len(alive_list) <5:
-                        continue
-                    print '> %s IPs alive' % len(alive_list)
-                    print alive_list
+                if len(alive_list) >= 3:
                     f = open(available_ip_file_name, 'a')
                     try:
+                        g_mutex.acquire()
                         f.writelines('\n'.join(alive_list))
                         del alive_list[:]
                     except:
@@ -145,12 +120,12 @@ def th_port_detect():
             print ' Failed'
 
 
-def get_one_ip(ip_list):
-    if len(ip_list) == 0:
+def get_one_ip():
+    if len(source_list) == 0:
         return None
     else:
         g_mutex.acquire()
-        ip = ip_list.pop(0)
+        ip = source_list.pop(0)
         g_mutex.release()
         return ip
 
@@ -171,7 +146,7 @@ def detecting(dic_ips, area_sorted_list):
 
     th_pool = []
     for i in range(max_threading):
-        th = threading.Thread(target=th_port_detect)
+        th = threading.Thread(target=port_detect)
         th_pool.append(th)
         th.start()
 
@@ -184,52 +159,49 @@ def detecting(dic_ips, area_sorted_list):
     f.writelines(ips)
     f.close()
 
-    print '> Detecting alive-IP finished'
+    print 'done!'
 
 
-def th_speed_test():
-    # ping test
-    while True:
-        ip = get_one_ip(g_sorted_alive_ip_list)
-        if ip is None:
-            return
+def nslookup():
+    # find ip by nslookup
+    # https://support.google.com/a/answer/60764?hl=zh-Hans
+    # nslookup -q=TXT _spf.google.com 8.8.8.8
+    # nslookup -q=TXT _netblocks.google.com 8.8.8.8
+    # nslookup -q=TXT _netblocks2.google.com 8.8.8.8
+    # nslookup -q=TXT _netblocks3.google.com 8.8.8.8
+    spf = 'nslookup -q=TXT _spf.google.com 8.8.8.8'
+    p = subprocess.Popen(
+        spf, stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
+    out = p.stdout.read()
+    print out
+    # pattern = re.compile(
+    #   "Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms", re.IGNORECASE)
+    #pattern = re.compile(r'\s=\s(\d+)ms', re.I)
+    #m = pattern.findall(out)
+    # print out
+    # if m and len(m) == 3:
+    #    g_ping_resoult[ip]=int(m[2])
 
-        p = subprocess.Popen(
-            ["ping.exe", ip], stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
-        out = p.stdout.read()
-        # pattern = re.compile(
-        #   "Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms", re.IGNORECASE)
-        pattern = re.compile(r'\s=\s(\d+)ms', re.I)
-        m = pattern.findall(out)
-        # print out
-        if m and len(m) == 3:
-            g_ping_resoult[ip]=int(m[2])
+    # if len(g_ping_resoult) >=5
 
-        if len(g_ping_resoult) >=5
+nslookup()
 
-
-
-g_sorted_alive_ip_list = []
-g_ping_result ={}
-def speed_test_all():
-    if not sorted_list:
-        return None
-
-    th_pool = []
-    for i in range(max_threading):
-        th = threading.Thread(target=th_speed_test)
-        th_pool.append(th)
-        th.start()
-
-    for i in range(max_threading):
-        threading.Thread.join(th_pool[i])
-
-    print '>Speed test finished'
-
-
-print speed_test('baidu.com')
-
-#dic = get_ips()
-#lst = sort_area()
-#detecting(dic, lst)
+#area_weight = '''Korea=8
+#Singapore=8
+#Egypt=5
+#Iceland=5
+#Philippines=7
+#Indonesia=7
+#Serbia=5
+#Mauritius=5
+#Netherlands
+#Slovakia=5
+#Kenya=5
+#Japan=9
+#Taiwan=8
+#Iraq=5
+#Norway=5
+#Russia=5
+#Thailand=7
+#Bulgaria=5'''
