@@ -9,22 +9,60 @@ import re
 import httplib
 import threading
 import subprocess
+import IPy
 
 github_url = 'https://raw.githubusercontent.com/Playkid/Google-IPs/master/README.md'
-max_threading = 10
+g_max_threading = 10
 g_mutex = threading.Lock()
-alive_list = []
-source_list = []
-available_ip_file_name = 'available.ip.list'
+g_alive_list = []
+g_source_list = []
+
+# Normally the longer distance the more It spends time on connection.
+g_area_weight = {'Bulgaria': 0,
+                 'Egypt': 0,
+                 'Hong Kong': 9,
+                 'Iceland': 0,
+                 'Indonesia': 0,
+                 'Iraq': 0,
+                 'Japan': 9,
+                 'Kenya': 0,
+                 'Korea': 8,
+                 'Mauritius': 0,
+                 'Netherlands': 0,
+                 'Norway': 0,
+                 'Philippines': 0,
+                 'Russia': 0,
+                 'Saudi Arabia': 0,
+                 'Serbia': 0,
+                 'Singapore': 9,
+                 'Slovakia': 0,
+                 'Taiwan': 9,
+                 'USA': 8,
+                 'Thailand': 7}
 
 
-def get_ips():
+def get_ips_from_github():
+    """Download the IP-list-file from github.com,
+    and write to file github.ip
+
+    output format example:
+        are=Hong Kong
+        1.2.3.4
+        5.6.7.8
+
+    Args:
+        None
+
+    Returns:
+        A dictionary with key(the area name) and value(IP list),
+        If failed, return None
+    """
     print 'downloading ip-file from github.com ...',
     urllib.urlretrieve(github_url, 'ips.md')
     print ' [ok]'
 
     print 'analyzing IP file ...'
-    re_area = re.compile('>\w+<', re.I)
+    re_area = re.compile('>\w+\s?\w+<', re.I)
     re_ip = re.compile('\d+.\d+.\d+.\d+')
     dic = {}
     path = os.path.join(os.getcwd(), 'ips.md')
@@ -52,8 +90,9 @@ def get_ips():
                     lst.append(match.group(0))
         f.close()
         os.remove(path)
-        # write to file ip.list
-        f = open('ip.list', 'w')
+        # write to file github.ip
+        path = os.path.join(os.getcwd(), 'github.ip')
+        f = open(path, 'w')
         total = 0
         for k in dic:
             total += len(dic[k])
@@ -61,7 +100,7 @@ def get_ips():
             ips = '\n'.join(dic[k])+'\n\n'
             f.writelines(ips)
         f.close()
-        print 'Success, get total IPs = %s ' % total
+        print 'Success, get total IPs = %s , save to file:%s' % (total, path)
         return dic
     except Exception, data:
         # pass
@@ -70,99 +109,9 @@ def get_ips():
         f.close()
 
 
-def sort_area():
-    arr = area_weight.split('\n')
-    lst = list()
-    for a in arr:
-        s = a.replace(' ', '').split('=')
-        if len(s) == 2:
-            s[1] = int(s[1])
-            lst.append(s)
-        else:
-            s.append(0)
-            lst.append(s)
-    lst.sort(key=lambda lst: lst[1], reverse=True)
-    # print lst
-    return lst
-
-
-def port_detect():
-    while True:
-        ip = get_one_ip()
-        if ip is None:
-            break
-
-        try:
-            print 'Connecting %s ...' % ip,
-            c = httplib.HTTPSConnection(ip, timeout=3)
-            c.request("GET", "/")
-            response = c.getresponse()
-            result = str(response.status)+' '+response.reason
-            if '200 OK' in result:
-                print ' OK '
-                alive_list.append(ip)
-                # Save available IPs to file, in case program is aborted by
-                # user in anytime
-                if len(alive_list) >= 3:
-                    f = open(available_ip_file_name, 'a')
-                    try:
-                        g_mutex.acquire()
-                        f.writelines('\n'.join(alive_list))
-                        del alive_list[:]
-                    except:
-                        pass
-                    finally:
-                        f.close()
-                        g_mutex.release()
-            else:
-                print ' Timeout '
-        except:
-            print ' Failed'
-
-
-def get_one_ip():
-    if len(source_list) == 0:
-        return None
-    else:
-        g_mutex.acquire()
-        ip = source_list.pop(0)
-        g_mutex.release()
-        return ip
-
-
-def detecting(dic_ips, area_sorted_list):
-    # merge all IPs to a list with sorted
-    for item in area_sorted_list:
-        if item in dic_ips.keys():
-            source_list.extend(dic_ips[item])
-            del dic_ips[iptem]
-    for item in dic_ips.keys():
-        source_list.extend(dic_ips[item])
-    print source_list[0:20]
-
-    path = os.path.join(os.getcwd(), available_ip_file_name)
-    if os.path.isfile(path):
-        os.remove(path)
-
-    th_pool = []
-    for i in range(max_threading):
-        th = threading.Thread(target=port_detect)
-        th_pool.append(th)
-        th.start()
-
-    for i in range(max_threading):
-        threading.Thread.join(th_pool[i])
-
-    # Save available IPs to file
-    f = open(path, 'a')
-    ips = '\n'.join(alive_list)
-    f.writelines(ips)
-    f.close()
-
-    print 'done!'
-
-
 def nslookup():
+    """-> Query Google's SPF record to retrieve the range of IP address
+    """
     # https://support.google.com/a/answer/60764?hl=zh-Hans
     # nslookup -q=TXT _spf.google.com 8.8.8.8
     # nslookup -q=TXT _netblocks.google.com 8.8.8.8
@@ -219,50 +168,121 @@ def nslookup():
         return None
 
     arr = res.split(' ')[1:-1]
-    arr2 = []
-    for txt in arr:
-        arr2.append(txt.split(':')[1])
-    del arr[:]
-    ip_list = []
+    arr = [x.split(':')[1] for x in arr]
     print '-> Receive IP range:'
-    print arr2
-    for txt in arr2:
-        arr = re.search(r'\d+/\d+', txt).group().split('/')
-        if arr[0] == '0':
-            arr[0] = 1
-        arr[1] = int(arr[1])+1
-        ip3 = re.search(r'\d+\.\d+\.\d+\.', txt).group()
-        for ip4 in range(arr[0], arr[1]):
-            ip_list.append(ip3+str(ip4))
+    print arr
+    ip_list = []
+    total = 0
+    for x in arr:
+        ips = IPy.IP(x)
+        f = [str(i) for i in ips]
+        total += len(f)
+        ip_list.extend(f)
+
     print '-> Change to IP list:'
-    print ip_list
+    print '-> Total IPs %s' % total
     # Write to file
     f = open(os.path.join(os.getcwd(), 'nslookup.ip'), 'w')
     try:
         f.writelines('\n'.join(ip_list))
-    except:
-        pass
+        print '-> Save IP list to file : %s' % 'nslookup.ip'
+    except Exception, e:
+        print e
     finally:
         f.close()
+    return ip_list
 
 
-nslookup()
+def sort_ip_list(github_ip_list, nslook_ip_list):
+    """Sort the IP list by area-weight
+    """
+    for k in g_area_weight.keys():
+        if g_area_weight[k] <= 7:
+            del github_ip_list[k]
 
-# area_weight = '''Korea=8
-# Singapore=8
-# Egypt=5
-# Iceland=5
-# Philippines=7
-# Indonesia=7
-# Serbia=5
-# Mauritius=5
-# Netherlands
-# Slovakia=5
-# Kenya=5
-# Japan=9
-# Taiwan=8
-# Iraq=5
-# Norway=5
-# Russia=5
-# Thailand=7
-# Bulgaria=5'''
+    del g_source_list[:]
+    for i in range(8, 10)[::-1]:
+        for k in g_area_weight.keys():
+            if g_area_weight[k] == i:
+                g_source_list.extend(github_ip_list[k])
+                break
+    g_source_list.extend(nslook_ip_list)
+    print '-> Sort IP list finished!'
+
+
+def th_port_detect():
+    """Try to connect the host by https.
+    """
+    while True:
+        ip = get_one_ip(g_source_list)
+        if ip is None:
+            break
+
+        try:
+            print 'Connecting %s ...' % ip,
+            c = httplib.HTTPSConnection(ip, timeout=3)
+            c.request("GET", "/")
+            response = c.getresponse()
+            result = str(response.status)+' '+response.reason
+            if '200 OK' in result:
+                print ' OK '
+                g_alive_list.append(ip)
+                # Save available IPs to file, in case program is aborted by
+                # user in anytime
+                if len(g_alive_list) >= 3:
+                    break
+                    #f = open('alive.ip', 'a')
+                    #try:
+                    #    g_mutex.acquire()
+                    #    f.writelines('\n'.join(alive_list))
+                    #    del g_alive_list[:]
+                    #except:
+                    #    pass
+                    #finally:
+                    #    f.close()
+                    #    g_mutex.release()
+            else:
+                print ' Timeout '
+        except:
+            print ' Failed'
+
+
+def get_one_ip(ip_list):
+    if len(ip_list) == 0:
+        return None
+    else:
+        g_mutex.acquire()
+        ip = ip_list.pop(0)
+        g_mutex.release()
+        return ip
+
+
+def detect_alive_ip():
+    """ Detect alive IP
+    """
+    del g_alive_list[:]
+    if os.path.isfile('alive.ip'):
+        os.remove('alive.ip')
+
+    th_pool = []
+    for i in range(g_max_threading):
+        th = threading.Thread(target=th_port_detect)
+        th_pool.append(th)
+        th.start()
+
+    for i in range(g_max_threading):
+        threading.Thread.join(th_pool[i])
+
+    # Save available IPs to file
+    f = open('alive.ip', 'a')
+    ips = '\n'.join(g_alive_list)
+    f.writelines(ips)
+    f.close()
+
+    print '-> Detecting alive IP FINISHED! '
+
+
+git = get_ips_from_github()
+spf = nslookup()
+sort_ip_list(git, spf)
+detect_alive_ip()
