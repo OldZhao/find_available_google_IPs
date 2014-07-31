@@ -16,16 +16,20 @@ class abc(object):
     """
     """
     v = 'a'
-    global __var
+    __var = 'kkk'
+    g =3
+
 
     def s(self):
-        print __var
+        global g =88
+        print self.__var
         __var = 9
         print __var
+        print self.__var
+        print g
 
     def __init__(self):
         self.v = 'v'
-        global __var = 'mm'
 
 
 k = abc()
