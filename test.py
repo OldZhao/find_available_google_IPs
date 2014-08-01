@@ -19,7 +19,7 @@ class abc(object):
 
     def th(self):
         print self.__a
-        pool=[]
+        pool = []
         for i in range(2):
             th1 = threading.Thread(target=self.run, args=[str(i)])
             pool.append(th1)
@@ -29,9 +29,8 @@ class abc(object):
             pool[i].join()
         print ' ok'
 
-
-    def run(self,name):
-        for i in range(5):
+    def run(self, name):
+        for i in range(10):
             self.__mutex.acquire()
             self.__a += 1
             print ' %s  %s' % (name, self.__a)

@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 
-# search Google's IPs from the Internet.
-
 import urllib
 import os
 import os.path
@@ -15,38 +13,42 @@ import IPy
 
 class GetIP(object):
 
-    """Get IP from github and GOOGLE SPF
+    """Find out available Google's IP list and speed test
     """
-    __g_max_threading = 10
-    __g_source_list = []
-    __g_alive_list = []
+    __max_threading = 20
+    __ipsource = 'all'
+    __count = 10
+    __avgtime = 200
+    __github_url = ''
+    __local_ip_file_path = ''
 
-    __github_url = 'https://raw.githubusercontent.com/Playkid/Google-IPs/master/README.md'
+    __source_list = []
+    __alive_list = {}   # key:IP  value:PING response agverage time
 
-    # Normally the longer distance the more It spends time on connection.
-    __g_area_weight = {'Bulgaria': 0,
-                       'Egypt': 0,
-                       'Hong Kong': 9,
-                       'Iceland': 0,
-                       'Indonesia': 0,
-                       'Iraq': 0,
-                       'Japan': 9,
-                       'Kenya': 0,
-                       'Korea': 8,
-                       'Mauritius': 0,
-                       'Netherlands': 0,
-                       'Norway': 0,
-                       'Philippines': 0,
-                       'Russia': 0,
-                       'Saudi Arabia': 0,
-                       'Serbia': 0,
-                       'Singapore': 9,
-                       'Slovakia': 0,
-                       'Taiwan': 9,
-                       'USA': 8,
-                       'Thailand': 7}
+   # Normally the longer distance, the more It spends time on connection.
+    __area_weight = {'Bulgaria': 0,
+                     'Egypt': 0,
+                     'Hong Kong': 9,
+                     'Iceland': 0,
+                     'Indonesia': 0,
+                     'Iraq': 0,
+                     'Japan': 9,
+                     'Kenya': 0,
+                     'Korea': 8,
+                     'Mauritius': 0,
+                     'Netherlands': 0,
+                     'Norway': 0,
+                     'Philippines': 0,
+                     'Russia': 0,
+                     'Saudi Arabia': 0,
+                     'Serbia': 0,
+                     'Singapore': 9,
+                     'Slovakia': 0,
+                     'Taiwan': 9,
+                     'USA': 8,
+                     'Thailand': 7}
 
-    def __get_iplist_from_github(self, url=self.__github_url):
+    def __get_iplist_from_github(self, url=''):
         """Download the IP-list-file from github.com,
         and write to file github.ip
 
@@ -63,7 +65,8 @@ class GetIP(object):
             If failed, return None
         """
         if not url:
-            url = self.__github_url
+            raise 'URL can NOT be empty'
+
         print '-> Downloading file from github.com...',
         urllib.urlretrieve(url, 'github.ips.source')
         print ' [ok]'
@@ -109,6 +112,10 @@ class GetIP(object):
 
     def __get_iplist_by_nslookup(self):
         """-> Query Google's SPF record to retrieve the range of IP address
+
+        Args:
+            None
+
         """
         # https://support.google.com/a/answer/60764?hl=zh-Hans
         # nslookup -q=TXT _spf.google.com 8.8.8.8
@@ -145,6 +152,7 @@ class GetIP(object):
         res = ''
         for d in domain:
             cmd = 'nslookup -q=TXT %s 8.8.8.8' % d
+            # try 5 time if time out
             for j in range(5):
                 p = subprocess.Popen(
                     cmd, stdin=subprocess.PIPE,
@@ -191,104 +199,176 @@ class GetIP(object):
         return ip_list
 
     def __sort_ip_list(self, github_ip_list, nslook_ip_list):
-        """Sort the IP list by area-weight
+        """Sort the IP list by area-weight,
+        the result will be stored in self.__source_list
         """
-        for k in self.__g_area_weight:
-            if __g_area_weight[k] <= 7:
+        for k in self.__area_weight:
+            if self.__area_weight[k] <= 7:
                 del github_ip_list[k]
 
-        print 'git ip left ' + len(github_ip_list)
+        # print 'git ip left %s ' % len(github_ip_list)
 
-        del __g_source_list[:]
+        del self.__source_list[:]
         for i in range(8, 10)[::-1]:
-            for k in __g_area_weight:
-                if __g_area_weight[k] == i:
-                    __g_source_list.extend(github_ip_list[k])
+            for k in self.__area_weight:
+                if self.__area_weight[k] == i:
+                    self.__source_list.extend(github_ip_list[k])
                     break
-        print 'git ip left ,g_source_list ' + len(__g_source_list)
-        __g_source_list.extend(nslook_ip_list)
-        print ' all g_source_list length ' + len(__g_source_list)
+        # print 'git ip left ,g_source_list %s ' % len(self.__source_list)
+        self.__source_list.extend(nslook_ip_list)
+        print '   source IP list %s ' % len(self.__source_list)
         print '-> Sort IP list finished!'
 
     def __th_port_detect(self):
         """Try to connect the host by https.
         """
         while True:
-            ip = get_one_ip(__g_source_list)
-            if ip is None:
+            # If the total of alive-IPs >= self.__count , It's enough
+            if len(self.__alive_list) >= self.__count:
+                break
+
+            ip = self.__get_one_ip(self.__source_list)
+            if not ip:
                 break
 
             try:
-                print 'Connecting %s ...' % ip,
+                msg = 'Connecting %s ...' % ip
                 c = httplib.HTTPSConnection(ip, timeout=3)
                 c.request("GET", "/")
                 response = c.getresponse()
                 result = str(response.status)+' '+response.reason
                 if '200 OK' in result:
-                    print ' OK '
-                    __g_alive_list.append(ip)
-                    # Save available IPs to file, in case program is aborted by
-                    # user in anytime
-                    if len(__g_alive_list) >= 3:
-                        __g_mutex.acquire()
-                        f = open('alive.ip', 'a')
-                            try:
-                                f.writelines('\n'.join(__g_alive_list))
-                                del __g_alive_list[:]
-                            except:
-                                pass
-                            finally:
-                                f.close()
-                                g_mutex.release()
+                    msg += ' [OK] '
+                    # PING test
+                    at = self.__speed_test(ip)
+                    msg += ' time=%s' % at
+                    # Ignore the IP which response avgtime > self.__avgtime
+                    if at >= self.__avgtime:
+                        msg += ' [IGNORE]'
+                    else:
+                        msg += ' [SAVE]'
+                        self.__alive_list[ip] = at
                 else:
-                    print response.status
+                    msg += ' [%s]' % response.status
             except:
-                print ' Failed'
+                msg += ' [Timeout]'
+            tmp = '[total:%s] ' % len(self.__alive_list)
+            msg = tmp + msg
+            print msg
 
     def __get_one_ip(self, ip_list):
         if len(ip_list) == 0:
             return None
         else:
-            g_mutex.acquire()
+            # g_mutex.acquire()
             ip = ip_list.pop(0)
-            g_mutex.release()
+            # g_mutex.release()
             return ip
 
-    def __detect_alive_ip(self):
-        """ Detect alive IP
+    def __speed_test(self, ip):
+        """PING test
         """
-        del __g_alive_list[:]
+        abnormal = 9999
+        while True:
+            if not ip:
+                return abnormal
+
+            p = subprocess.Popen(
+                ["ping.exe", ip], stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
+            out = p.stdout.read()
+            # pattern = re.compile(
+            #   "Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms", re.IGNORECASE)
+            pattern = re.compile(r'\s=\s(\d+)ms', re.I)
+            m = pattern.findall(out)
+            # print out
+            if m and len(m) == 3:
+                return int(m[2])
+            else:
+                return abnormal
+
+    def __detect_alive_ip(self):
+        """ Detect alive IP with list self.__source_list
+
+        Args:
+            None
+        """
+
         if os.path.isfile('alive.ip'):
             os.remove('alive.ip')
 
+        self.__alive_list.clear()
+        if len(self.__source_list) == 0:
+            return None
+
         th_pool = []
-        for i in range(__g_max_threading):
-            th = threading.Thread(target=th_port_detect)
+        for i in range(self.__max_threading):
+            th = threading.Thread(target=self.__th_port_detect)
             th_pool.append(th)
             th.start()
 
-        for i in range(__g_max_threading):
+        for i in range(self.__max_threading):
             threading.Thread.join(th_pool[i])
 
         # Save available IPs to file
-        if len(__g_alive_list) > 0:
-            f = open('alive.ip', 'a')
-            ips = '\n'.join(__g_alive_list)
-            f.writelines(ips)
+        if len(self.__alive_list) > 0:
+            arr = self.__sort_ip_list_by_time()
+            f = open('alive.ip', 'w')
+            for k in arr:
+                f.writelines('%-15s   %-4s \n' % (k[0], k[1]))
             f.close()
 
         print '-> Detecting alive IP FINISHED! '
 
-    def start(self):
-        """Start
+    def __sort_ip_list_by_time(self):
+        """Sort IP list by time
         """
-        git = get_ips_from_github()
-        spf = nslookup()
-        sort_ip_list(git, spf)
-        # detect_alive_ip()
+        arr = sorted(self.__alive_list.items(), key=lambda x: x[1])
+        print arr
+        return arr
 
-    def __init__(self):
-        pass
+    def start(self):
+        """Start to work..
+        """
+        git = self.__get_iplist_from_github(self.__github_url)
+        spf = self.__get_iplist_by_nslookup()
+
+        self.__sort_ip_list(git, spf)
+        self.__detect_alive_ip()
+
+    def __init__(self, ipsource='all', path='', count=10, avgtime=200):
+        """Initialize
+
+        Args:
+            ipsource options:
+                1.'github'. Download the file from https://raw.githubusercontent.com/Playkid/Google-IPs/master/README.md
+                2.'gspf'. Query Google's SPF record to retrieve the range of IP address
+                3.'all'. Default option. Use github IP-list file AND query Google SPF.
+                4.'file'. Read a local file, need to set the argument 'path' with the file's path.
+            path :
+                the path of the file that store IPs with one IP in a line.
+            count:
+                default value=10, how many IPs you want, It will
+                stop detecting while the amount of alive-IPs >= count.
+            avgtime:
+                default value=150ms, speed test, ignore the IP that PING response average time more than 150ms.
+
+        Return:
+            Class Instance
+        """
+        self.__ipsource = ipsource
+        self.__local_ip_file_path = path
+        self.__count = count
+        self.__avgtime = avgtime
+
+        self.__github_url = 'https://raw.githubusercontent.com/Playkid/Google-IPs/master/README.md'
+
+        if ipsource.strip() == 'file' and not path:
+            raise 'the path of local source IP file could NOT empty'
+
 
 if __name__ == '__main__':
     pass
+
+g = GetIP()
+g.start()
