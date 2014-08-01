@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
-# find available GOOGLE IP
 
 import urllib
 import os
@@ -15,22 +14,33 @@ class abc(object):
 
     """
     """
-    v = 'a'
-    __var = 'kkk'
-    g =3
+    __a = 3
+    __mutex = threading.Lock()
+
+    def th(self):
+        print self.__a
+        pool=[]
+        for i in range(2):
+            th1 = threading.Thread(target=self.run, args=[str(i)])
+            pool.append(th1)
+            th1.start()
+
+        for i in range(2):
+            pool[i].join()
+        print ' ok'
 
 
-    def s(self):
-        global g =88
-        print self.__var
-        __var = 9
-        print __var
-        print self.__var
-        print g
+    def run(self,name):
+        for i in range(5):
+            self.__mutex.acquire()
+            self.__a += 1
+            print ' %s  %s' % (name, self.__a)
+            self.__mutex.release()
 
     def __init__(self):
-        self.v = 'v'
+        print self.__a
+        self.__a = 0
 
 
 k = abc()
-k.s()
+k.th()
