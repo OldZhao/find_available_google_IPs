@@ -9,8 +9,10 @@ import httplib
 import threading
 import subprocess
 import IPy
-import logging
-import logging.handlers
+import shutil
+import time
+#import logging
+#import logging.handlers
 
 
 class FindIP(object):
@@ -23,6 +25,8 @@ class FindIP(object):
     __avgtime = 200
     __github_url = ''
     __local_ip_file_path = ''
+    __out_dir = os.path.join(os.getcwd(), 'out')
+    __in_dir = 'in'
 
     __source_list = []  # store all IPs
     # store alive IPs, key:IP  value:PING response agverage time
@@ -262,6 +266,7 @@ class FindIP(object):
                         self.__alive_list[ip] = at
                 else:
                     msg += ' [%s]' % response.status
+                c.close()
             except:
                 msg += ' [Timeout]'
             tmp = '[total:%s] ' % len(self.__alive_list)
@@ -323,6 +328,7 @@ class FindIP(object):
             threading.Thread.join(th_pool[i])
 
         # Save available IPs to file
+        arr = {}
         if len(self.__alive_list) > 0:
             arr = self.__sort_ip_list_by_time()
             f = open('alive.ip', 'w')
@@ -332,6 +338,7 @@ class FindIP(object):
 
         print '-> Detecting alive IP FINISHED! '
         print '-> Save to file [alive.ip]'
+        return arr
 
     def __sort_ip_list_by_time(self):
         """Sort IP list by time
@@ -339,6 +346,58 @@ class FindIP(object):
         arr = sorted(self.__alive_list.items(), key=lambda x: x[1])
         print arr
         return arr
+
+    def __generate_format_file(self, alive_list):
+        """Generate format file : host , goagent proxy.ini
+        """
+
+        if not os.path.isdir(self.__out_dir):
+            # shutil.rmtree(self.__out_dir)
+            # os.removedirs(self.__out_dir)
+            os.mkdir(self.__out_dir)
+
+        if not alive_list:
+            return None
+
+        if not os.path.isfile('hosts.template'):
+            raise NameError, 'the template file of host missing'
+
+        repeater = 3 if 3 <= len(alive_list) else len(alive_list)
+
+        # host-file format
+        f = open('hosts.template', 'r')
+        txt = []
+        try:
+            for line in f:
+                if '{ip}' in line:
+                    for i in range(0, repeater):
+                        txt.append(line.replace('{ip}', alive_list[i][0]))
+                elif '{time}' in line:
+                    txt.append(
+                        line.replace('{time}', time.asctime(time.localtime(time.time()))))
+                else:
+                    txt.append(line)
+            f.close()
+            f = open(os.path.join(self.__out_dir, 'host'), 'w')
+            f.writelines(''.join(txt))
+        except Exception, e:
+            print 'Error : read/write file error'
+            print e
+        finally:
+            f.close()
+
+        # goagent format
+        arr = [x[0] for x in alive_list]
+        txt = '|'.join(arr)
+        f = open(os.path.join(self.__out_dir, 'goagent'), 'w')
+        try:
+            f.writelines(txt)
+        except:
+            print 'Error : read/write file error'
+        finally:
+            f.close()
+
+        print '-> format output finished. dir: %s' % self.__out_dir
 
     def start(self):
         """Start to work..
@@ -348,7 +407,8 @@ class FindIP(object):
         spf = self.__get_iplist_by_nslookup()
 
         self.__sort_ip_list(git, spf)
-        self.__detect_alive_ip()
+        alist = self.__detect_alive_ip()
+        self.__generate_format_file(alist)
 
     def __init__(self, ipsource='all', path='', count=10, avgtime=200):
         """Initialize
@@ -406,5 +466,5 @@ class FindIP(object):
 #L = logging.getLogger('log')
 # print L
 # L.info('fck')
-f = FindIP('all', '', 10, 200)
+f = FindIP('all', '', 5, 2200)
 f.start()
