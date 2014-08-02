@@ -9,9 +9,11 @@ import httplib
 import threading
 import subprocess
 import IPy
+import logging
+import logging.handlers
 
 
-class GetIP(object):
+class FindIP(object):
 
     """Find out available Google's IP list and speed test
     """
@@ -22,8 +24,9 @@ class GetIP(object):
     __github_url = ''
     __local_ip_file_path = ''
 
-    __source_list = []
-    __alive_list = {}   # key:IP  value:PING response agverage time
+    __source_list = []  # store all IPs
+    # store alive IPs, key:IP  value:PING response agverage time
+    __alive_list = {}
 
    # Normally the longer distance, the more It spends time on connection.
     __area_weight = {'Bulgaria': 0,
@@ -46,14 +49,15 @@ class GetIP(object):
                      'Slovakia': 0,
                      'Taiwan': 9,
                      'USA': 8,
+                     'America': 8,
                      'Thailand': 7}
 
     def __get_iplist_from_github(self, url=''):
         """Download the IP-list-file from github.com,
-        and write to file github.ip
+        and save to file github.ip
 
         output format example:
-            are=Hong Kong
+            area=Hong Kong
             1.2.3.4
             5.6.7.8
 
@@ -65,11 +69,17 @@ class GetIP(object):
             If failed, return None
         """
         if not url:
-            raise 'URL can NOT be empty'
+            print '-> Empty URL, use default value $s' % self.__github_url
+            # return None
+            #raise 'URL can NOT be empty'
 
         print '-> Downloading file from github.com...',
-        urllib.urlretrieve(url, 'github.ips.source')
-        print ' [ok]'
+        try:
+            urllib.urlretrieve(url, 'github.ips.source')
+            print ' [ok]'
+        except IOError, e:
+            print ' [faild]'
+            return None
 
         print '-> Analyzing file...'
         re_area = re.compile('>\w+\s?\w+<', re.I)
@@ -107,7 +117,7 @@ class GetIP(object):
             ips = '\n'.join(dic[k]) + '\n\n'
             f.writelines(ips)
         f.close()
-        print '-> Done! Get %s IPs from Github, save to file [github.ip]' % total
+        print '-> Done! Get %s IPs from Github, save to file [github.ip]\n' % total
         return dic
 
     def __get_iplist_by_nslookup(self):
@@ -148,6 +158,7 @@ class GetIP(object):
         if len(domain) == 0:
             print '-> Damn it~ We get nothing!'
             return None
+
         print '-> Query IP range...'
         res = ''
         for d in domain:
@@ -177,16 +188,18 @@ class GetIP(object):
         print '-> Receive IP range:'
         print arr
 
+        print '-> Change to IP list:'
+
         ip_list = []
         total = 0
         for x in arr:
             ips = IPy.IP(x)
             f = [str(i) for i in ips]
+            print '-> Get %s IPs' % len(f)
             total += len(f)
             ip_list.extend(f)
 
-        print '-> Change to IP list:'
-        print '-> Get %s IPs' % total
+        print '-> Total: %s' % total
         # Write to file
         f = open('nslookup.ip', 'w')
         try:
@@ -202,19 +215,18 @@ class GetIP(object):
         """Sort the IP list by area-weight,
         the result will be stored in self.__source_list
         """
-        for k in self.__area_weight:
-            if self.__area_weight[k] <= 7:
-                del github_ip_list[k]
 
-        # print 'git ip left %s ' % len(github_ip_list)
+        for k in self.__area_weight:
+            if self.__area_weight[k] <= 7 and k in github_ip_list:
+                del github_ip_list[k]
 
         del self.__source_list[:]
         for i in range(8, 10)[::-1]:
             for k in self.__area_weight:
-                if self.__area_weight[k] == i:
+                if self.__area_weight[k] == i and k in github_ip_list:
                     self.__source_list.extend(github_ip_list[k])
                     break
-        # print 'git ip left ,g_source_list %s ' % len(self.__source_list)
+
         self.__source_list.extend(nslook_ip_list)
         print '   source IP list %s ' % len(self.__source_list)
         print '-> Sort IP list finished!'
@@ -319,6 +331,7 @@ class GetIP(object):
             f.close()
 
         print '-> Detecting alive IP FINISHED! '
+        print '-> Save to file [alive.ip]'
 
     def __sort_ip_list_by_time(self):
         """Sort IP list by time
@@ -330,6 +343,7 @@ class GetIP(object):
     def start(self):
         """Start to work..
         """
+
         git = self.__get_iplist_from_github(self.__github_url)
         spf = self.__get_iplist_by_nslookup()
 
@@ -356,6 +370,7 @@ class GetIP(object):
         Return:
             Class Instance
         """
+
         self.__ipsource = ipsource
         self.__local_ip_file_path = path
         self.__count = count
@@ -366,7 +381,30 @@ class GetIP(object):
         if ipsource.strip() == 'file' and not path:
             raise 'the path of local source IP file could NOT empty'
 
-    pass
 
-g = GetIP('all','',9,200)
-g.start()
+#name = 'log'
+#h = logging.getLogger(name)
+#
+#fh = logging.FileHandler('run.log')
+# fh.setLevel(logging.DEBUG)
+#
+#console = logging.StreamHandler()
+# console.setLevel(logging.DEBUG)
+#
+# formatter = logging.Formatter(
+# '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# formatter = logging.Formatter(
+#    '[%(levelname)s] - %(asctime)s - %(message)s')
+#
+# fh.setFormatter(formatter)
+# console.setFormatter(formatter)
+#
+# h.addHandler(fh)
+# h.addHandler(console)
+#h.fatal('initialize log...')
+#
+#L = logging.getLogger('log')
+# print L
+# L.info('fck')
+f = FindIP('all', '', 10, 200)
+f.start()

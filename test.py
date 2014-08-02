@@ -9,12 +9,13 @@ import httplib
 import threading
 import subprocess
 
+ggg=56
 
 class abc(object):
-
     """
     """
     __a = 3
+    b =9
     __mutex = threading.Lock()
 
     def th(self):
@@ -37,15 +38,15 @@ class abc(object):
             self.__mutex.release()
 
     def ex(self):
-        #raise NameError,'no name'
-        #raise XXoo,'no name'
-        raise Warning,'no name'
-        print 'ss'
+        global ggg
+        print ggg
 
 
     def __init__(self):
         print self.__a
-        self.__a = 0
+        print self.__class__.__a
+        print self.b
+        print self.__class__.b
 
 
 k = abc()
