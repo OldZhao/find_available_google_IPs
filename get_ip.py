@@ -366,9 +366,7 @@ class GetIP(object):
         if ipsource.strip() == 'file' and not path:
             raise 'the path of local source IP file could NOT empty'
 
-
-if __name__ == '__main__':
     pass
 
-g = GetIP()
+g = GetIP('all','',9,200)
 g.start()

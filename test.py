@@ -36,10 +36,17 @@ class abc(object):
             print ' %s  %s' % (name, self.__a)
             self.__mutex.release()
 
+    def ex(self):
+        #raise NameError,'no name'
+        #raise XXoo,'no name'
+        raise Warning,'no name'
+        print 'ss'
+
+
     def __init__(self):
         print self.__a
         self.__a = 0
 
 
 k = abc()
-k.th()
+k.ex()
