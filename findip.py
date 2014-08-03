@@ -1,15 +1,25 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 
+"""
+A useful tool that helping to find available google's IPs.
+
+Further Information might be available at:
+https://github.com/scymen/find_available_google_IPs
+"""
+
+
 import urllib
 import os
 import os.path
+import sys
+import getopt
 import re
 import httplib
 import threading
 import subprocess
 import IPy
-import shutil
+#import shutil
 import time
 #import logging
 #import logging.handlers
@@ -17,15 +27,19 @@ import time
 
 class FindIP(object):
 
-    """Find out available Google's IP list and speed test
+    """Find out available Google's IP list in China ,and speed test
     """
-    __max_threading = 20
+    __version = '1.0'
+    __pyenv = '2.7.6'
+    __abspath = os.path.abspath(os.path.dirname(sys.argv[0]))
+
+    __max_threading = 10
     __ipsource = 'all'
     __count = 10
     __avgtime = 200
     __github_url = ''
     __local_ip_file_path = ''
-    __out_dir = os.path.join(os.getcwd(), 'out')
+    __out_dir = os.path.join(__abspath, 'out')
     __in_dir = 'in'
 
     __source_list = []  # store all IPs
@@ -46,7 +60,7 @@ class FindIP(object):
                      'Netherlands': 0,
                      'Norway': 0,
                      'Philippines': 0,
-                     'Russia': 0,
+                     'Russia': 7,
                      'Saudi Arabia': 0,
                      'Serbia': 0,
                      'Singapore': 9,
@@ -78,8 +92,9 @@ class FindIP(object):
             #raise 'URL can NOT be empty'
 
         print '-> Downloading file from github.com...',
+        path = os.path.join(self.__abspath, 'github.ips.source')
         try:
-            urllib.urlretrieve(url, 'github.ips.source')
+            urllib.urlretrieve(url, path)
             print ' [ok]'
         except IOError, e:
             print ' [faild]'
@@ -89,7 +104,7 @@ class FindIP(object):
         re_area = re.compile('>\w+\s?\w+<', re.I)
         re_ip = re.compile('\d+.\d+.\d+.\d+')
         dic = {}
-        f = open('github.ips.source', 'r')
+        f = open(path, 'r')
         key = ''
         lst = list()
         for line in f:
@@ -111,9 +126,10 @@ class FindIP(object):
                 if match:
                     lst.append(match.group(0))
         f.close()
-        os.remove('github.ips.source')
+        os.remove(path)
         # write to file github.ip
-        f = open('github.ip', 'w')
+        path = os.path.join(self.__abspath, 'github.ip')
+        f = open(path, 'w')
         total = 0
         for k in dic:
             total += len(dic[k])
@@ -129,6 +145,10 @@ class FindIP(object):
 
         Args:
             None
+
+        Returns:
+            A dictionary with key:USA and value(IP list),
+            If failed, return None
 
         """
         # https://support.google.com/a/answer/60764?hl=zh-Hans
@@ -205,7 +225,8 @@ class FindIP(object):
 
         print '-> Total: %s' % total
         # Write to file
-        f = open('nslookup.ip', 'w')
+        path = os.path.join(self.__abspath, 'nslookup.ip')
+        f = open(path, 'w')
         try:
             f.writelines('\n'.join(ip_list))
             print '-> Save IP list to file [nslookup.ip]'
@@ -213,33 +234,62 @@ class FindIP(object):
             print 'Error : save to file error.'
         finally:
             f.close()
-        return ip_list
+        dic = {}
+        dic['USA'] = ip_list
+        return dic
 
-    def __sort_ip_list(self, github_ip_list, nslook_ip_list):
+    def __sort_ip_list(self, github_ip_list, nslookup_ip_list):
         """Sort the IP list by area-weight,
         the result will be stored in self.__source_list
         """
+        # filter bad network line
+        if github_ip_list:
+            for k in self.__area_weight:
+                if self.__area_weight[k] < 7 and k in github_ip_list:
+                    del github_ip_list[k]
 
-        for k in self.__area_weight:
-            if self.__area_weight[k] <= 7 and k in github_ip_list:
-                del github_ip_list[k]
+        if not github_ip_list:
+            github_ip_list = {}
+
+        # Merge two list
+        if nslookup_ip_list:
+            github_ip_list['USA'] = nslookup_ip_list['USA']
 
         del self.__source_list[:]
+
         for i in range(8, 10)[::-1]:
             for k in self.__area_weight:
                 if self.__area_weight[k] == i and k in github_ip_list:
                     self.__source_list.extend(github_ip_list[k])
                     break
 
-        self.__source_list.extend(nslook_ip_list)
         print '   source IP list %s ' % len(self.__source_list)
         print '-> Sort IP list finished!'
+
+    def __read_local_file(self, path):
+        """Import IP list from a local file
+        """
+        if not os.path.isfile(path):
+            print 'File not found'
+            return None
+
+        ip_list = []
+        f = open(path, 'r')
+        try:
+            for line in f:
+                ip_list.append(line[0:-1])
+        except:
+            print 'read file failed'
+        finally:
+            f.close()
+        return ip_list
 
     def __th_port_detect(self):
         """Try to connect the host by https.
         """
         while True:
-            # If the total of alive-IPs >= self.__count , It's enough
+            # If the total of alive-IPs >= self.__count , It's good enough
+            # then go back
             if len(self.__alive_list) >= self.__count:
                 break
 
@@ -247,9 +297,9 @@ class FindIP(object):
             if not ip:
                 break
 
+            msg = 'Connecting %s ...' % ip
+            c = httplib.HTTPSConnection(ip, timeout=3)
             try:
-                msg = 'Connecting %s ...' % ip
-                c = httplib.HTTPSConnection(ip, timeout=3)
                 c.request("GET", "/")
                 response = c.getresponse()
                 result = str(response.status)+' '+response.reason
@@ -266,9 +316,11 @@ class FindIP(object):
                         self.__alive_list[ip] = at
                 else:
                     msg += ' [%s]' % response.status
-                c.close()
             except:
                 msg += ' [Timeout]'
+            finally:
+                c.close()
+
             tmp = '[total:%s] ' % len(self.__alive_list)
             msg = tmp + msg
             print msg
@@ -311,9 +363,6 @@ class FindIP(object):
             None
         """
 
-        if os.path.isfile('alive.ip'):
-            os.remove('alive.ip')
-
         self.__alive_list.clear()
         if len(self.__source_list) == 0:
             return None
@@ -328,15 +377,16 @@ class FindIP(object):
             threading.Thread.join(th_pool[i])
 
         # Save available IPs to file
+        path = os.path.join(self.__abspath, 'alive.ip')
         arr = {}
         if len(self.__alive_list) > 0:
             arr = self.__sort_ip_list_by_time()
-            f = open('alive.ip', 'w')
+            f = open(path, 'w')
             for k in arr:
                 f.writelines('%-15s   %-4s \n' % (k[0], k[1]))
             f.close()
 
-        print '-> Detecting alive IP FINISHED! '
+        print '-> Detecting alive IP FINISHED! total=%s ' % len(self.__alive_list)
         print '-> Save to file [alive.ip]'
         return arr
 
@@ -359,13 +409,14 @@ class FindIP(object):
         if not alive_list:
             return None
 
-        if not os.path.isfile('hosts.template'):
-            raise NameError, 'the template file of host missing'
+        path = os.path.join(self.__abspath, 'hosts.template')
+        if not os.path.isfile(path):
+            raise NameError, 'the template file [hosts.template] was missing'
 
         repeater = 3 if 3 <= len(alive_list) else len(alive_list)
 
         # host-file format
-        f = open('hosts.template', 'r')
+        f = open(path, 'r')
         txt = []
         try:
             for line in f:
@@ -397,7 +448,7 @@ class FindIP(object):
         finally:
             f.close()
 
-        print '-> format output finished. dir: %s' % self.__out_dir
+        print '-> format output finished. dir: [out]'
 
     def start(self):
         """Start to work..
@@ -410,7 +461,9 @@ class FindIP(object):
         alist = self.__detect_alive_ip()
         self.__generate_format_file(alist)
 
-    def __init__(self, ipsource='all', path='', count=10, avgtime=200):
+        print '\n== DONE ==\n'
+
+    def __init__(self, ipsource='all', path='', count=10, avgtime=200, maxthreading=10):
         """Initialize
 
         Args:
@@ -425,7 +478,8 @@ class FindIP(object):
                 default value=10, how many IPs you want, It will
                 stop detecting while the amount of alive-IPs >= count.
             avgtime:
-                default value=150ms, speed test, ignore the IP that PING response average time more than 150ms.
+                default value=150ms, speed test,
+                ignore the IP that PING response average time more than 150ms.
 
         Return:
             Class Instance
@@ -435,11 +489,67 @@ class FindIP(object):
         self.__local_ip_file_path = path
         self.__count = count
         self.__avgtime = avgtime
+        self.__max_threading = maxthreading
 
         self.__github_url = 'https://raw.githubusercontent.com/Playkid/Google-IPs/master/README.md'
 
         if ipsource.strip() == 'file' and not path:
             raise 'the path of local source IP file could NOT empty'
+
+
+def usage():
+    print u"\
+    Usage:\n \
+        findip.py [-t|-n number] [-h|--help] \n\
+    \n\
+    For example:\n\
+        findip.py \n\
+        OR \n\
+        findip.py -t 250 -n 5\n\
+    \n\
+    Options:\n\
+        -t : default=200, the average time(ms) of PING test response, \n\
+             the one >=200 will be ignore.\n\
+        -n : default=5, total of available IPs that you want.\n\
+        -h|--help: print usage\n\
+        \n\
+    Output:\n\
+        the results are in the folder 'out' \n\
+        ├─out\n\
+           ├─hosts    =>  update the hosts file of your system \n\
+           └─goagent  =>  for the node [iplist] of proxy.ini in goagent\n\
+    "
+
+
+if __name__ == '__main__':
+    t = 250
+    n = 5
+    m = 20
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "t:n:m:h", ["help"])
+        # print os.getcwd()
+        #path = os.path.abspath(os.path.dirname(sys.argv[0]))
+        # print path
+        # print opts
+        # print args
+        for opt, arg in opts:
+            if opt in ("-h", "--help") or opt not in ('-t', '-n','-m'):
+                usage()
+                sys.exit(1)
+            # else:
+            #    print("%s  ==> %s" % (opt, arg))
+            if opt == '-t':
+                t = int(arg)
+            if opt == '-n':
+                n = int(arg)
+            if opt == '-m':
+                m = int(arg)
+    except getopt.GetoptError:
+        print(">> I don't get It!\n")
+        usage()
+        sys.exit(1)
+    f = FindIP('all', '', n, t, m)
+    f.start()
 
 
 #name = 'log'
@@ -466,5 +576,3 @@ class FindIP(object):
 #L = logging.getLogger('log')
 # print L
 # L.info('fck')
-f = FindIP('all', '', 5, 2200)
-f.start()
