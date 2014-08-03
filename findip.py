@@ -96,7 +96,7 @@ class FindIP(object):
         try:
             urllib.urlretrieve(url, path)
             print ' [ok]'
-        except IOError, e:
+        except IOError as e:
             print ' [faild]'
             return None
 
@@ -190,8 +190,11 @@ class FindIP(object):
             # try 5 time if time out
             for j in range(5):
                 p = subprocess.Popen(
-                    cmd, stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
+                    cmd,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    shell=True)
                 out = p.stdout.read()
                 if '~all' not in out:
                     continue
@@ -411,7 +414,7 @@ class FindIP(object):
 
         path = os.path.join(self.__abspath, 'hosts.template')
         if not os.path.isfile(path):
-            raise NameError, 'the template file [hosts.template] was missing'
+            raise NameError('the template file [hosts.template] was missing')
 
         repeater = 3 if 3 <= len(alive_list) else len(alive_list)
 
@@ -421,17 +424,22 @@ class FindIP(object):
         try:
             for line in f:
                 if '{ip}' in line:
-                    for i in range(0, repeater):
-                        txt.append(line.replace('{ip}', alive_list[i][0]))
+                    txt.append(line.replace('{ip}', alive_list[0][0]))
+                    # for i in range(0, repeater):
+                    #    txt.append(line.replace('{ip}', alive_list[i][0]))
                 elif '{time}' in line:
                     txt.append(
-                        line.replace('{time}', time.asctime(time.localtime(time.time()))))
+                        line.replace(
+                            '{time}',
+                            time.asctime(
+                                time.localtime(
+                                    time.time()))))
                 else:
                     txt.append(line)
             f.close()
-            f = open(os.path.join(self.__out_dir, 'host'), 'w')
+            f = open(os.path.join(self.__out_dir, 'hosts'), 'w')
             f.writelines(''.join(txt))
-        except Exception, e:
+        except Exception as e:
             print 'Error : read/write file error'
             print e
         finally:
@@ -463,7 +471,13 @@ class FindIP(object):
 
         print '\n== DONE ==\n'
 
-    def __init__(self, ipsource='all', path='', count=10, avgtime=200, maxthreading=10):
+    def __init__(
+            self,
+            ipsource='all',
+            path='',
+            count=10,
+            avgtime=200,
+            maxthreading=10):
         """Initialize
 
         Args:
@@ -533,7 +547,7 @@ if __name__ == '__main__':
         # print opts
         # print args
         for opt, arg in opts:
-            if opt in ("-h", "--help") or opt not in ('-t', '-n','-m'):
+            if opt in ("-h", "--help") or opt not in ('-t', '-n', '-m'):
                 usage()
                 sys.exit(1)
             # else:

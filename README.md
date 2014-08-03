@@ -6,9 +6,6 @@ If you are living in China, you known what I mean.
 
 It works well with Windows, not yet tested on Linux.
 
-How does It works
-----
-NULL
 
 How to start
 ----
