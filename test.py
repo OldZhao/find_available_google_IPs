@@ -10,6 +10,7 @@ import re
 import httplib
 import threading
 import subprocess
+import time
 
 ggg = 56
 
@@ -42,31 +43,51 @@ class abc(object):
             self.__mutex.release()
 
     def ex(self):
-        global ggg
+        global __a
         print ggg
 
+    def stop(self):
+        print self.b
+        print self.__a
+
     def __init__(self):
-        print 'class'
-        print sys.argv[:]
+        pass
+        #print 'class'
+        #print sys.argv[:]
         # print self.__a
         # print self.__class__.__a
         # print self.b
         # print self.__class__.b
 
 if __name__ == '__main__':
-    opts, args = getopt.getopt(sys.argv[1:], "t:m:n:h",['help'])
-    print opts
-    print args
-    for a in args:
-        if a not in ('-t','-m','-n','-h','--help'):
-            print ' str help'
-            sys.exit(1)
+    c = abc()
+    c.stop()
+    #for i in range(10000):
+    #    try:
+    #        time.sleep(1)
+    #        print ' loop %s ' % i
+    #    except KeyboardInterrupt:
+    #        print ' ctrl-c'
+    #        break
+    #print ' exit'
+    #sys.exit(0)
 
-    for op, value in opts:
-        if op not in ('-t','-m','-n','-h','--help'):
-            print op
-            print 'str help'
-            sys.exit(1)
-        else:
-            print 'ok'
+
+
+
+    #opts, args = getopt.getopt(sys.argv[1:], "t:m:n:h",['help'])
+    #print opts
+    #print args
+    #for a in args:
+    #    if a not in ('-t','-m','-n','-h','--help'):
+    #        print ' str help'
+    #        sys.exit(1)
+
+    #for op, value in opts:
+    #    if op not in ('-t','-m','-n','-h','--help'):
+    #        print op
+    #        print 'str help'
+    #        sys.exit(1)
+    #    else:
+    #        print 'ok'
 

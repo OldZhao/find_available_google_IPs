@@ -13,6 +13,7 @@ import urllib
 import os
 import os.path
 import sys
+import platform
 import getopt
 import re
 import httplib
@@ -31,6 +32,7 @@ class FindIP(object):
     """
     __version = '1.0'
     __pyenv = '2.7.6'
+    __os_win = True
     __abspath = os.path.abspath(os.path.dirname(sys.argv[0]))
 
     __max_threading = 10
@@ -45,6 +47,7 @@ class FindIP(object):
     __source_list = []  # store all IPs
     # store alive IPs, key:IP  value:PING response agverage time
     __alive_list = {}
+    __is_exit =False  # exit-signal
 
    # Normally the longer distance, the more It spends time on connection.
     __area_weight = {'Bulgaria': 0,
@@ -108,6 +111,11 @@ class FindIP(object):
         key = ''
         lst = list()
         for line in f:
+
+            if self.__is_exit:
+                f.close()
+                sys.exit(0)
+
             if 'th' in line:
                 # add to dictionary
                 if len(key) > 0 and len(lst) > 0:
@@ -162,6 +170,10 @@ class FindIP(object):
         spf = 'nslookup -q=TXT _spf.google.com 8.8.8.8'
         domain = []
         for i in range(5):
+
+            if self.__is_exit:
+                sys.exit(0)
+
             p = subprocess.Popen(
                 spf, stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
@@ -186,9 +198,17 @@ class FindIP(object):
         print '-> Query IP range...'
         res = ''
         for d in domain:
+
+            if self.__is_exit:
+                sys.exit(0)
+
             cmd = 'nslookup -q=TXT %s 8.8.8.8' % d
             # try 5 time if time out
             for j in range(5):
+
+                if self.__is_exit:
+                    sys.exit(0)
+
                 p = subprocess.Popen(
                     cmd,
                     stdin=subprocess.PIPE,
@@ -220,6 +240,10 @@ class FindIP(object):
         ip_list = []
         total = 0
         for x in arr:
+
+            if self.__is_exit:
+                sys.exit(0)
+
             ips = IPy.IP(x)
             f = [str(i) for i in ips]
             print '-> Get %s IPs' % len(f)
@@ -246,10 +270,10 @@ class FindIP(object):
         the result will be stored in self.__source_list
         """
         # filter bad network line
-        if github_ip_list:
-            for k in self.__area_weight:
-                if self.__area_weight[k] < 7 and k in github_ip_list:
-                    del github_ip_list[k]
+        #if github_ip_list:
+        #    for k in self.__area_weight:
+        #        if self.__area_weight[k] < 7 and k in github_ip_list:
+        #            del github_ip_list[k]
 
         if not github_ip_list:
             github_ip_list = {}
@@ -272,17 +296,17 @@ class FindIP(object):
     def __read_local_file(self, path):
         """Import IP list from a local file
         """
-        if not os.path.isfile(path):
-            print 'File not found'
-            return None
 
         ip_list = []
         f = open(path, 'r')
+        p = re.compile('\d+.\d+.\d+.\d+')
         try:
             for line in f:
-                ip_list.append(line[0:-1])
+                match = p.search(line)
+                if match:
+                    ip_list.append(match.group(0))
         except:
-            print 'read file failed'
+            print 'read file error'
         finally:
             f.close()
         return ip_list
@@ -291,6 +315,10 @@ class FindIP(object):
         """Try to connect the host by https.
         """
         while True:
+
+            if self.__is_exit:
+                sys.exit(0)
+
             # If the total of alive-IPs >= self.__count , It's good enough
             # then go back
             if len(self.__alive_list) >= self.__count:
@@ -340,24 +368,43 @@ class FindIP(object):
     def __speed_test(self, ip):
         """PING test
         """
-        abnormal = 9999
+
+        abnormal = 99999    # abnormal response time
         while True:
             if not ip:
                 return abnormal
 
-            p = subprocess.Popen(
-                ["ping.exe", ip], stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
-            out = p.stdout.read()
-            # pattern = re.compile(
-            #   "Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms", re.IGNORECASE)
-            pattern = re.compile(r'\s=\s(\d+)ms', re.I)
-            m = pattern.findall(out)
-            # print out
-            if m and len(m) == 3:
-                return int(m[2])
+            if self.__os_win:
+                p = subprocess.Popen(
+                    ["ping.exe", ip], stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
+                out = p.stdout.read()
+                # pattern = re.compile(
+                #   "Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms", re.IGNORECASE)
+                pattern = re.compile(r'\s=\s(\d+)ms', re.I)
+                m = pattern.findall(out)
+                # print out
+                if m and len(m) == 3:
+                    return int(m[2])
+                else:
+                    return abnormal
+            # Linux, MAC or other system
             else:
-                return abnormal
+                p = subprocess.Popen(["ping -c4 " + ip],
+                                     stdin=subprocess.PIPE,
+                                     stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE,
+                                     shell=True)
+                out = p.stdout.read()
+                out = out.split('\n')[-2]
+                if 'avg' in out:
+                    out = out.split('/')[4]
+                    if out:
+                        return int(out)
+                    else:
+                        return abnormal
+                else:
+                    return abnormal
 
     def __detect_alive_ip(self):
         """ Detect alive IP with list self.__source_list
@@ -376,8 +423,21 @@ class FindIP(object):
             th_pool.append(th)
             th.start()
 
-        for i in range(self.__max_threading):
-            threading.Thread.join(th_pool[i])
+        #for i in range(self.__max_threading):
+        #    threading.Thread.join(th_pool[i])
+
+        # loop waiting for ctrl-c signal
+        while True:
+            alive =False
+            try:
+                time.sleep(0.5)
+                for i in range(self.__max_threading):
+                    alive = alive or th_pool[i].isAlive()
+                if not alive:
+                    break
+            except KeyboardInterrupt:
+                print '->>>user cancel'
+                self.stop()
 
         # Save available IPs to file
         path = os.path.join(self.__abspath, 'alive.ip')
@@ -389,7 +449,7 @@ class FindIP(object):
                 f.writelines('%-15s   %-4s \n' % (k[0], k[1]))
             f.close()
 
-        print '-> Detecting alive IP FINISHED! total=%s ' % len(self.__alive_list)
+        print '-> Total alive IPs = %s ' % len(self.__alive_list)
         print '-> Save to file [alive.ip]'
         return arr
 
@@ -456,25 +516,42 @@ class FindIP(object):
         finally:
             f.close()
 
-        print '-> format output finished. dir: [out]'
+        print '-> format output, save to folder [out]'
 
     def start(self):
         """Start to work..
         """
 
-        git = self.__get_iplist_from_github(self.__github_url)
-        spf = self.__get_iplist_by_nslookup()
+        if self.__ipsource == 'github':
+            git = self.__get_iplist_from_github(self.__github_url)
+            self.__sort_ip_list(git, None)
+        elif self.__ipsource == 'gspf':
+            spf = self.__get_iplist_by_nslookup()
+            self.__sort_ip_list(None,spf)
+        elif self.__ipsource == 'all':
+            git = self.__get_iplist_from_github(self.__github_url)
+            spf = self.__get_iplist_by_nslookup()
+            self.__sort_ip_list(git, spf)
+        else:
+            iplist = self.__read_local_file(self.__local_ip_file_path)
+            self.__source_list = iplist
 
-        self.__sort_ip_list(git, spf)
+        print ' start function '
+        print ' source list total ips %s ' % len ( self.__source_list)
         alist = self.__detect_alive_ip()
         self.__generate_format_file(alist)
 
-        print '\n== DONE ==\n'
+        if self.__is_exit:
+            print '\n == USER CANCEL ==\n'
+        else:
+            print '\n== DONE ==\n'
+
+    def stop(self):
+        self.__is_exit=True
 
     def __init__(
             self,
             ipsource='all',
-            path='',
             count=10,
             avgtime=200,
             maxthreading=10):
@@ -485,9 +562,7 @@ class FindIP(object):
                 1.'github'. Download the file from https://raw.githubusercontent.com/Playkid/Google-IPs/master/README.md
                 2.'gspf'. Query Google's SPF record to retrieve the range of IP address
                 3.'all'. Default option. Use github IP-list file AND query Google SPF.
-                4.'file'. Read a local file, need to set the argument 'path' with the file's path.
-            path :
-                the path of the file that store IPs with one IP in a line.
+                4. A file path. Read a local file that store IPs with one IP in a line
             count:
                 default value=10, how many IPs you want, It will
                 stop detecting while the amount of alive-IPs >= count.
@@ -499,29 +574,51 @@ class FindIP(object):
             Class Instance
         """
 
-        self.__ipsource = ipsource
-        self.__local_ip_file_path = path
+        sopt = ('github', 'gspf', 'all')
+        ipsource = ipsource.strip()
+        if not ipsource:
+            self.__ipsource = 'all'
+        elif ipsource in sopt:
+            self.__ipsource = ipsource
+        else:
+            ipsource = ipsource.strip('"')
+            ipsource = ipsource.strip("'")
+            if not os.path.isfile(ipsource):
+                raise 'the path of local source IP file is invalid'
+            else:
+                self.__ipsource = 'file'
+                self.__local_ip_file_path = ipsource
+
         self.__count = count
-        self.__avgtime = avgtime
+        self.__avgtime = 100 if avgtime <= 100 else avgtime
         self.__max_threading = maxthreading
 
         self.__github_url = 'https://raw.githubusercontent.com/Playkid/Google-IPs/master/README.md'
 
-        if ipsource.strip() == 'file' and not path:
-            raise 'the path of local source IP file could NOT empty'
+        if 'windows' in platform.system().lower():
+            self.__os_win = True
+        else:
+            self.__os_win = False
 
 
 def usage():
     print u"\
     Usage:\n \
-        findip.py [-t|-n|-m number] [-h|--help] \n\
+        findip.py [-s string] [-t|-n|-m number] [-h|--help] \n\
     \n\
     For example:\n\
         findip.py \n\
         OR \n\
-        findip.py -t 250 -n 5\n\
+        findip.py -s all -t 250 -n 5\n\
+        OR \n\
+        findip.py -s c:/ip.txt -t 200 -n 5 -m 20 \n\
     \n\
     Options:\n\
+        -s : source of IP list, \n\
+             'github'. Download IP list from github.com \n\
+             'gspf'. Query Google's SPF record to retrieve IP range \n\
+             'all'. Default option. Use github IP-list AND query Google SPF. \n\
+              A file path. Read a local file that store IPs with one IP in a line \n\
         -t : default=200, the average time(ms) of PING test response, \n\
              the one >=200 will be ignore.\n\
         -n : default=5, total of available IPs that you want.\n\
@@ -540,11 +637,12 @@ if __name__ == '__main__':
     t = 250
     n = 5
     m = 20
+    s = ''
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "t:n:m:h", ["help"])
+        opts, args = getopt.getopt(sys.argv[1:], "t:n:m:s:h", ["help"])
         # print os.getcwd()
         #path = os.path.abspath(os.path.dirname(sys.argv[0]))
-        arr = ('-t', '-n', '-m', '-h', '--help')
+        arr = ('-t', '-n', '-m', '-h', '-s', '--help')
         for a in args:
             if a not in arr:
                 usage()
@@ -563,14 +661,16 @@ if __name__ == '__main__':
                 n = int(arg)
             if opt == '-m':
                 m = int(arg)
+            if opt == '-s':
+                s = arg
     # except getopt.GetoptError, ValueError:
     except:
         print(">> I don't get It!\n")
         usage()
         sys.exit(1)
 
-    f = FindIP('all', '', n, t, m)
-    f.start()
+    fip = FindIP(s, n, t, m)
+    fip.start()
 
 
 #name = 'log'
