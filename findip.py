@@ -47,7 +47,7 @@ class FindIP(object):
     __source_list = []  # store all IPs
     # store alive IPs, key:IP  value:PING response agverage time
     __alive_list = {}
-    __is_exit =False  # exit-signal
+    __is_exit = False  # exit-signal
 
    # Normally the longer distance, the more It spends time on connection.
     __area_weight = {'Bulgaria': 0,
@@ -270,7 +270,7 @@ class FindIP(object):
         the result will be stored in self.__source_list
         """
         # filter bad network line
-        #if github_ip_list:
+        # if github_ip_list:
         #    for k in self.__area_weight:
         #        if self.__area_weight[k] < 7 and k in github_ip_list:
         #            del github_ip_list[k]
@@ -370,41 +370,40 @@ class FindIP(object):
         """
 
         abnormal = 99999    # abnormal response time
-        while True:
-            if not ip:
-                return abnormal
+        if not ip:
+            return abnormal
 
-            if self.__os_win:
-                p = subprocess.Popen(
-                    ["ping.exe", ip], stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
-                out = p.stdout.read()
-                # pattern = re.compile(
-                #   "Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms", re.IGNORECASE)
-                pattern = re.compile(r'\s=\s(\d+)ms', re.I)
-                m = pattern.findall(out)
-                # print out
-                if m and len(m) == 3:
-                    return int(m[2])
-                else:
-                    return abnormal
-            # Linux, MAC or other system
+        if self.__os_win:
+            p = subprocess.Popen(
+                ["ping.exe", ip], stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
+            out = p.stdout.read()
+            # pattern = re.compile(
+            #   "Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms", re.IGNORECASE)
+            pattern = re.compile(r'\s=\s(\d+)ms', re.I)
+            m = pattern.findall(out)
+            # print out
+            if m and len(m) == 3:
+                return int(m[2])
             else:
-                p = subprocess.Popen(["ping -c4 " + ip],
-                                     stdin=subprocess.PIPE,
-                                     stdout=subprocess.PIPE,
-                                     stderr=subprocess.PIPE,
-                                     shell=True)
-                out = p.stdout.read()
-                out = out.split('\n')[-2]
-                if 'avg' in out:
-                    out = out.split('/')[4]
-                    if out:
-                        return int(out)
-                    else:
-                        return abnormal
+                return abnormal
+        # Linux, MAC or other system
+        else:
+            p = subprocess.Popen(["ping -c4 " + ip],
+                                 stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
+                                 shell=True)
+            out = p.stdout.read()
+            out = out.split('\n')[-2]
+            if 'avg' in out:
+                out = out.split('/')[4]
+                if out:
+                    return int(out)
                 else:
                     return abnormal
+            else:
+                return abnormal
 
     def __detect_alive_ip(self):
         """ Detect alive IP with list self.__source_list
@@ -423,12 +422,12 @@ class FindIP(object):
             th_pool.append(th)
             th.start()
 
-        #for i in range(self.__max_threading):
+        # for i in range(self.__max_threading):
         #    threading.Thread.join(th_pool[i])
 
         # loop waiting for ctrl-c signal
         while True:
-            alive =False
+            alive = False
             try:
                 time.sleep(0.5)
                 for i in range(self.__max_threading):
@@ -436,7 +435,7 @@ class FindIP(object):
                 if not alive:
                     break
             except KeyboardInterrupt:
-                print '->>>user cancel'
+                print '---->>>    user cancel'
                 self.stop()
 
         # Save available IPs to file
@@ -527,7 +526,7 @@ class FindIP(object):
             self.__sort_ip_list(git, None)
         elif self.__ipsource == 'gspf':
             spf = self.__get_iplist_by_nslookup()
-            self.__sort_ip_list(None,spf)
+            self.__sort_ip_list(None, spf)
         elif self.__ipsource == 'all':
             git = self.__get_iplist_from_github(self.__github_url)
             spf = self.__get_iplist_by_nslookup()
@@ -537,7 +536,7 @@ class FindIP(object):
             self.__source_list = iplist
 
         print ' start function '
-        print ' source list total ips %s ' % len ( self.__source_list)
+        print ' source list total ips %s ' % len(self.__source_list)
         alist = self.__detect_alive_ip()
         self.__generate_format_file(alist)
 
@@ -547,7 +546,7 @@ class FindIP(object):
             print '\n== DONE ==\n'
 
     def stop(self):
-        self.__is_exit=True
+        self.__is_exit = True
 
     def __init__(
             self,
