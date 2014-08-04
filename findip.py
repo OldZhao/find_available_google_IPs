@@ -396,9 +396,11 @@ class FindIP(object):
                                  shell=True)
             out = p.stdout.read()
             out = out.split('\n')[-2]
+            print out
             if 'avg' in out:
                 out = out.split('/')[4]
                 if out:
+                    print out
                     return int(out)
                 else:
                     return abnormal
