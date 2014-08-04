@@ -514,7 +514,7 @@ class FindIP(object):
 def usage():
     print u"\
     Usage:\n \
-        findip.py [-t|-n number] [-h|--help] \n\
+        findip.py [-t|-n|-m number] [-h|--help] \n\
     \n\
     For example:\n\
         findip.py \n\
@@ -525,6 +525,7 @@ def usage():
         -t : default=200, the average time(ms) of PING test response, \n\
              the one >=200 will be ignore.\n\
         -n : default=5, total of available IPs that you want.\n\
+        -m : default=20, max number of threading to work.\n\
         -h|--help: print usage\n\
         \n\
     Output:\n\
@@ -543,25 +544,31 @@ if __name__ == '__main__':
         opts, args = getopt.getopt(sys.argv[1:], "t:n:m:h", ["help"])
         # print os.getcwd()
         #path = os.path.abspath(os.path.dirname(sys.argv[0]))
-        # print path
-        # print opts
-        # print args
-        for opt, arg in opts:
-            if opt in ("-h", "--help") or opt not in ('-t', '-n', '-m'):
+        arr = ('-t', '-n', '-m', '-h', '--help')
+        for a in args:
+            if a not in arr:
                 usage()
                 sys.exit(1)
-            # else:
-            #    print("%s  ==> %s" % (opt, arg))
+
+        for opt, arg in opts:
+            if opt not in opt:
+                usage()
+                sys.exit(1)
+            if opt == '-h' or opt == '--help':
+                usage()
+                sys.exit(1)
             if opt == '-t':
                 t = int(arg)
             if opt == '-n':
                 n = int(arg)
             if opt == '-m':
                 m = int(arg)
-    except getopt.GetoptError:
+    # except getopt.GetoptError, ValueError:
+    except:
         print(">> I don't get It!\n")
         usage()
         sys.exit(1)
+
     f = FindIP('all', '', n, t, m)
     f.start()
 

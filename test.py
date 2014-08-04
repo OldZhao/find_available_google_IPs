@@ -54,16 +54,19 @@ class abc(object):
         # print self.__class__.b
 
 if __name__ == '__main__':
-    opts, args = getopt.getopt(sys.argv[1:], "hi:o:")
-    input_file = ""
-    output_file = ""
-    for op, value in opts:
-        if op == "-i":
-            input_file = value
-        elif op == "-o":
-            output_file = value
-        elif op == "-h":
-            sys.exit()
+    opts, args = getopt.getopt(sys.argv[1:], "t:m:n:h",['help'])
+    print opts
+    print args
+    for a in args:
+        if a not in ('-t','-m','-n','-h','--help'):
+            print ' str help'
+            sys.exit(1)
 
-    k = abc()
-    k.ex()
+    for op, value in opts:
+        if op not in ('-t','-m','-n','-h','--help'):
+            print op
+            print 'str help'
+            sys.exit(1)
+        else:
+            print 'ok'
+

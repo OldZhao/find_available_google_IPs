@@ -2,6 +2,7 @@ find available Google's IPs
 ====
 
 A useful tool that helping to find available Google's IPs.
+
 If you are living in China, you known what I mean.
 
 It works well with Windows, not yet tested on Linux.
@@ -14,6 +15,8 @@ How to start
 <https://www.python.org/download/releases/2.7.8/>
 
 2.run **python findip.py**
+
+for help, type : `findip.py -h`
 
 3.when It finished, check the result in folder **out**
 
