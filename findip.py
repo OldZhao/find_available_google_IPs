@@ -430,9 +430,10 @@ class FindIP(object):
                 if not alive:
                     break
             except KeyboardInterrupt:
-                print '|---->>>                  <<<-----'
-                print '|---->>>    user cancel   <<<-----'
-                print '|---->>>                  <<<-----'
+                print ''
+                print '---->>>                  <<<-----'
+                print '---->>>    user cancel   <<<-----'
+                print '---->>>                  <<<-----'
                 self.stop()
 
         # Save available IPs to file
