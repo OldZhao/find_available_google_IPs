@@ -369,7 +369,7 @@ class FindIP(object):
         """PING test
         """
 
-        abnormal = 99999    # abnormal response time
+        abnormal = 99999.0    # abnormal response time
         if not ip:
             return abnormal
 
@@ -382,11 +382,8 @@ class FindIP(object):
             #   "Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms", re.IGNORECASE)
             pattern = re.compile(r'\s=\s(\d+)ms', re.I)
             m = pattern.findall(out)
-            # print out
             if m and len(m) == 3:
-                return int(m[2])
-            else:
-                return abnormal
+                return float(m[2])
         # Linux, MAC or other system
         else:
             p = subprocess.Popen(["ping -c4 " + ip],
@@ -396,16 +393,12 @@ class FindIP(object):
                                  shell=True)
             out = p.stdout.read()
             out = out.split('\n')[-2]
-            print out
+            # there is the result if not 100% lost
             if 'avg' in out:
                 out = out.split('/')[4]
                 if out:
-                    print out
-                    return int(out)
-                else:
-                    return abnormal
-            else:
-                return abnormal
+                    return float(out)
+        return abnormal
 
     def __detect_alive_ip(self):
         """ Detect alive IP with list self.__source_list
@@ -437,7 +430,9 @@ class FindIP(object):
                 if not alive:
                     break
             except KeyboardInterrupt:
-                print '---->>>    user cancel'
+                print '|---->>>                  <<<-----'
+                print '|---->>>    user cancel   <<<-----'
+                print '|---->>>                  <<<-----'
                 self.stop()
 
         # Save available IPs to file
@@ -537,7 +532,6 @@ class FindIP(object):
             iplist = self.__read_local_file(self.__local_ip_file_path)
             self.__source_list = iplist
 
-        print ' start function '
         print ' source list total ips %s ' % len(self.__source_list)
         alist = self.__detect_alive_ip()
         self.__generate_format_file(alist)
@@ -613,19 +607,25 @@ def usage():
         findip.py -s all -t 250 -n 5\n\
         OR \n\
         findip.py -s c:/ip.txt -t 200 -n 5 -m 20 \n\
+        OR \n\
+        findip.py -s \"c:/ip2.txt\" \n\
     \n\
     Options:\n\
         -s : source of IP list, \n\
              'github'. Download IP list from github.com \n\
              'gspf'. Query Google's SPF record to retrieve IP range \n\
              'all'. Default option. Use github IP-list AND query Google SPF. \n\
-              A file path. Read a local file that store IPs with one IP in a line \n\
+             'file-path'. Read a local file that store IPs with one IP in a line \n\
+                    Use quotation mark if the path contains blank \n\
         -t : default=200, the average time(ms) of PING test response, \n\
              the one >=200 will be ignore.\n\
         -n : default=5, total of available IPs that you want.\n\
         -m : default=20, max number of threading to work.\n\
         -h|--help: print usage\n\
         \n\
+    How to stop: \n\
+        press ctrl-c  \n\
+        It will delay few seconds to exit all the threads. \n\
     Output:\n\
         the results are in the folder 'out' \n\
         ├─out\n\
