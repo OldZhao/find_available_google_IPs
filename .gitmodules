@@ -1,0 +1,3 @@
+[submodule "ipy"]
+	path = ipy
+	url = https://github.com/haypo/python-ipy.git

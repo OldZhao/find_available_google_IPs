@@ -19,6 +19,7 @@ import re
 import httplib
 import threading
 import subprocess
+sys.path.append('ipy/')
 import IPy
 #import shutil
 import time
