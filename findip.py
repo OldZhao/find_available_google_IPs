@@ -2,7 +2,21 @@
 # -*- coding:utf-8 -*-
 
 """
-A useful tool that helping to find available google's IPs.
+A useful tool that helping to find survived google's IPs.
+
+Google was blocked randomly and DNS-polluted by the GOV of TIANCHAO since
+many years ago, and it getting worst now. It's very difficult to visit
+google website inside the WALL. Fortunately, not all of the IPs were in the
+black list of THE GREAT FIRE WALL. With shattered hopes, we try to find out
+the IP which is survived if we're lucky enough.
+
+Anyway, THE BEST WAY to get through the WALL is using a VPN or PROXY.
+(e.g: shadowsocks)
+
+"Freedom has many difficulties and democracy is not perfect,
+but we have never had to put a wall up to keep our people in,
+to prevent them from leaving us."
+--1963.6.25
 
 Further Information might be available at:
 https://github.com/scymen/find_available_google_IPs
@@ -19,586 +33,325 @@ import re
 import httplib
 import threading
 import subprocess
-sys.path.append('ipy/')
 import IPy
-#import shutil
 import time
-#import logging
-#import logging.handlers
+import socket
+import random
 
 
 class FindIP(object):
 
-    """Find out available Google's IP list in China ,and speed test
-    """
-    __version = '1.0'
+    __version = '1.1'
     __pyenv = '2.7.6'
-    __os_win = True
+    __is_win_os = True
     __abspath = os.path.abspath(os.path.dirname(sys.argv[0]))
+    __source_ip_list = []
+    __source_port_list = []
+    __total_alive_ip = 3
+    __avgtime = 500
+    __alive_ip_list = {}  # key=ip,value=[avg-time,opened-ports]
+    __is_exit = False  # multi-threads exit-signal
+    __g_mutex = None  # threading.Lock()
+    __g_mutex_save = None  # threading.Lock()
 
-    __max_threading = 10
-    __ipsource = 'all'
-    __count = 10
-    __avgtime = 200
-    __github_url = ''
-    __local_ip_file_path = ''
-    __out_dir = os.path.join(__abspath, 'out')
-    __in_dir = 'in'
-
-    __source_list = []  # store all IPs
-    # store alive IPs, key:IP  value:PING response agverage time
-    __alive_list = {}
-    __is_exit = False  # exit-signal
-
-   # Normally the longer distance, the more It spends time on connection.
-    __area_weight = {'Bulgaria': 0,
-                     'Egypt': 0,
-                     'Hong Kong': 9,
-                     'Iceland': 0,
-                     'Indonesia': 0,
-                     'Iraq': 0,
-                     'Japan': 9,
-                     'Kenya': 0,
-                     'Korea': 8,
-                     'Mauritius': 0,
-                     'Netherlands': 0,
-                     'Norway': 0,
-                     'Philippines': 0,
-                     'Russia': 7,
-                     'Saudi Arabia': 0,
-                     'Serbia': 0,
-                     'Singapore': 9,
-                     'Slovakia': 0,
-                     'Taiwan': 9,
-                     'USA': 8,
-                     'America': 8,
-                     'Thailand': 7}
-
-    def __get_iplist_from_github(self, url=''):
-        """Download the IP-list-file from github.com,
-        and save to file github.ip
-
-        output format example:
-            area=Hong Kong
-            1.2.3.4
-            5.6.7.8
-
-        Args:
-            url, default='https://raw.githubusercontent.com/Playkid/Google-IPs/master/README.md'
-
-        Returns:
-            A dictionary with key(the area name) and value(IP list),
-            If failed, return None
-        """
-        if not url:
-            print '-> Empty URL, use default value $s' % self.__github_url
-            # return None
-            #raise 'URL can NOT be empty'
-
-        print '-> Downloading file from github.com...',
-        path = os.path.join(self.__abspath, 'github.ips.source')
-        try:
-            urllib.urlretrieve(url, path)
-            print ' [ok]'
-        except IOError as e:
-            print ' [faild]'
-            return None
-
-        print '-> Analyzing file...'
-        re_area = re.compile('>\w+\s?\w+<', re.I)
-        re_ip = re.compile('\d+.\d+.\d+.\d+')
-        dic = {}
-        f = open(path, 'r')
-        key = ''
-        lst = list()
-        for line in f:
-
+    def get_iplist_from_local_file(self, path=None):
+        if not path or len(path.strip()) < 1:
+            raise ValueError('Invalidate file path:', path)
+        else:
+            print '-> read file: ', os.path.split(path)[1]
+        ip_list = []
+        reip = re.compile(r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+[/0-9]*')
+        tmplist = []
+        with open(path, 'r') as f:
+            for line in f:
+                tmplist.extend(reip.findall(line))
+                if self.__is_exit:
+                    sys.exit(0)
+        for ip in tmplist:
+            if '/' in ip:
+                ipy = IPy.IP(ip)
+                ip_list.extend([str(x) for x in ipy])
+            else:
+                ip_list.append(ip)
             if self.__is_exit:
-                f.close()
                 sys.exit(0)
+        ip_list = {}.fromkeys(ip_list).keys()
+        print '\tget %s IPs' % len(ip_list)
+        return ip_list
 
-            if 'th' in line:
-                # add to dictionary
-                if len(key) > 0 and len(lst) > 0:
-                    print '   area = %s, %s IPs' % (key, len(lst))
-                    # merge the IP list for existed-area-key in dictionay
-                    if key in dic:
-                        lst.extend(dic[key])
-                    dic[key] = lst
-                    key = ''
-                    lst = list()
-                match = re_area.search(line)
-                if match:
-                    key = match.group(0)[1:-1].strip()
-            elif 'td' in line:
-                match = re_ip.search(line)
-                if match:
-                    lst.append(match.group(0))
-        f.close()
+    def get_iplist_from_web(self, url=None):
+        print '-> Downloading :%s' % url
+
+        if not url or len(url.strip()) < 4:
+            raise ValueError('Invalidate URL')
+
+        path = os.path.join(self.__abspath, 'web.ip.tmp')
+        urllib.urlretrieve(url, path)
+
+        print '\tsave to web.ip.tmp'
+        print '\tAnalyzing ...'
+        re_ip = re.compile(r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+[/0-9]*')
+        ip_list = []
+
+        ip_list = self.get_iplist_from_local_file(path)
+
         os.remove(path)
-        # write to file github.ip
-        path = os.path.join(self.__abspath, 'github.ip')
-        f = open(path, 'w')
-        total = 0
-        for k in dic:
-            total += len(dic[k])
-            f.writelines('area=' + k + '\n')
-            ips = '\n'.join(dic[k]) + '\n\n'
-            f.writelines(ips)
-        f.close()
-        print '-> Done! Get %s IPs from Github, save to file [github.ip]\n' % total
-        return dic
 
-    def __get_iplist_by_nslookup(self):
-        """-> Query Google's SPF record to retrieve the range of IP address
+        path = os.path.join(self.__abspath, 'web.ip.list')
+        with open(path, 'w') as f:
+            f.write('\n'.join(ip_list))
 
-        Args:
-            None
+        print '\tDone! %s IPs save to web.ip.list\n' % len(ip_list)
+        return ip_list
 
-        Returns:
-            A dictionary with key:USA and value(IP list),
-            If failed, return None
-
-        """
-        # https://support.google.com/a/answer/60764?hl=zh-Hans
+    def get_iplist_by_nslookup(self):
+        # manual:https://support.google.com/a/answer/60764?hl=zh-Hans
         # nslookup -q=TXT _spf.google.com 8.8.8.8
         # nslookup -q=TXT _netblocks.google.com 8.8.8.8
         # nslookup -q=TXT _netblocks2.google.com 8.8.8.8
         # nslookup -q=TXT _netblocks3.google.com 8.8.8.8
-
-        print "-> Query Google's SPF record to retrieve the range of IP address..."
-        # Try 5 times to retrieve the SPF records
+        print "-> Query Google's SPF record..."
+        # firstly, try to retrieve the SPF records
         spf = 'nslookup -q=TXT _spf.google.com 8.8.8.8'
         domain = []
-        for i in range(5):
-
+        for i in range(1, 6):  # try 5 times if timeout or sth err
             if self.__is_exit:
                 sys.exit(0)
-
-            p = subprocess.Popen(
-                spf, stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
+            p = subprocess.Popen(spf, stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
             out = p.stdout.read()
-            # print out
-            res = re.findall(r'~all', out)
-            if not res:
-                print '-> Timeout,try again (%s) ...' % i
+            if '~all' not in out:
+                print '\tTimeout,try again (%s) ...' % i
                 continue
             else:
-                s = re.search(r'".+"', out).group()
-                arr = s.split(' ')[1:-1]
-                for txt in arr:
-                    domain.append(txt.split(':')[1])
-                print "-> Recieve the list of the domains included in Google's SPF record:"
+                r = re.compile(r'[_A-Za-z0-9]+.google.com')
+                domain = r.findall(out)[1:]
+                print "\tRecieved: ",
                 print domain
                 break
+
         if len(domain) == 0:
-            print '-> Damn it~ We get nothing!'
+            print '\tFailed!! Get nothing.'
             return None
 
-        print '-> Query IP range...'
-        res = ''
+        # secondly, query ip range by every single SPF record.
+        print '\tQuery IP range...'
+        r4 = re.compile(r'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+')
+        # r6 =re.compile()
+        iprange = []
         for d in domain:
-
             if self.__is_exit:
                 sys.exit(0)
-
             cmd = 'nslookup -q=TXT %s 8.8.8.8' % d
-            # try 5 time if time out
-            for j in range(5):
-
+            for j in range(5):  # try 5 times if sth err
                 if self.__is_exit:
                     sys.exit(0)
-
-                p = subprocess.Popen(
-                    cmd,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    shell=True)
+                p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, shell=True)
                 out = p.stdout.read()
                 if '~all' not in out:
+                    print '\tTimeout,try again (%s) ...' % j
                     continue
-                if 'ip4' in out:
-                    res = re.search(r'".+"', out).group()
-                    break
                 else:
-                    break
-            if len(res) > 0:
-                break
-
-        if len(res) == 0:
-            print '-> Damn it~ We get nothing!'
-            return None
-
-        arr = res.split(' ')[1:-1]
-        arr = [x.split(':')[1] for x in arr]
-        print '-> Receive IP range:'
-        print arr
-
-        print '-> Change to IP list:'
-
-        ip_list = []
-        total = 0
-        for x in arr:
-
-            if self.__is_exit:
-                sys.exit(0)
-
-            ips = IPy.IP(x)
-            f = [str(i) for i in ips]
-            print '-> Get %s IPs' % len(f)
-            total += len(f)
-            ip_list.extend(f)
-
-        print '-> Total: %s' % total
-        # Write to file
-        path = os.path.join(self.__abspath, 'nslookup.ip')
-        f = open(path, 'w')
-        try:
-            f.writelines('\n'.join(ip_list))
-            print '-> Save IP list to file [nslookup.ip]'
-        except IOError:
-            print 'Error : save to file error.'
-        finally:
-            f.close()
-        dic = {}
-        dic['USA'] = ip_list
-        return dic
-
-    def __sort_ip_list(self, github_ip_list, nslookup_ip_list):
-        """Sort the IP list by area-weight,
-        the result will be stored in self.__source_list
-        """
-        # filter bad network line
-        # if github_ip_list:
-        #    for k in self.__area_weight:
-        #        if self.__area_weight[k] < 7 and k in github_ip_list:
-        #            del github_ip_list[k]
-
-        if not github_ip_list:
-            github_ip_list = {}
-
-        # Merge two list
-        if nslookup_ip_list:
-            github_ip_list['USA'] = nslookup_ip_list['USA']
-
-        del self.__source_list[:]
-
-        for i in range(8, 10)[::-1]:
-            for k in self.__area_weight:
-                if self.__area_weight[k] == i and k in github_ip_list:
-                    self.__source_list.extend(github_ip_list[k])
+                    iprange.extend(r4.findall(out))
                     break
 
-        print '   source IP list %s ' % len(self.__source_list)
-        print '-> Sort IP list finished!'
-
-    def __read_local_file(self, path):
-        """Import IP list from a local file
-        """
-
-        ip_list = []
-        f = open(path, 'r')
-        p = re.compile('\d+.\d+.\d+.\d+')
-        try:
-            for line in f:
-                match = p.search(line)
-                if match:
-                    ip_list.append(match.group(0))
-        except:
-            print 'read file error'
-        finally:
-            f.close()
-        return ip_list
-
-    def __th_port_detect(self):
-        """Try to connect the host by https.
-        """
-        while True:
-
-            if self.__is_exit:
-                sys.exit(0)
-
-            # If the total of alive-IPs >= self.__count , It's good enough
-            # then go back
-            if len(self.__alive_list) >= self.__count:
-                break
-
-            ip = self.__get_one_ip(self.__source_list)
-            if not ip:
-                break
-
-            msg = 'Connecting %s ...' % ip
-            c = httplib.HTTPSConnection(ip, timeout=3)
-            try:
-                c.request("GET", "/")
-                response = c.getresponse()
-                result = str(response.status)+' '+response.reason
-                if '200 OK' in result:
-                    msg += ' [OK] '
-                    # PING test
-                    at = self.__speed_test(ip)
-                    msg += ' time=%s' % at
-                    # Ignore the IP which response avgtime > self.__avgtime
-                    if at >= self.__avgtime:
-                        msg += ' [IGNORE]'
-                    else:
-                        msg += ' [SAVE]'
-                        self.__alive_list[ip] = at
-                else:
-                    msg += ' [%s]' % response.status
-            except:
-                msg += ' [Timeout]'
-            finally:
-                c.close()
-
-            tmp = '[total:%s] ' % len(self.__alive_list)
-            msg = tmp + msg
-            print msg
-
-    def __get_one_ip(self, ip_list):
-        if len(ip_list) == 0:
+        if len(iprange) == 0:
+            print '\tFailed!! Get nothing.'
             return None
         else:
-            # g_mutex.acquire()
-            ip = ip_list.pop(0)
-            # g_mutex.release()
-            return ip
+            print iprange
+        # thirdly, caculate ip list with the ip range
+        print '\tCaculate IP list:'
+        ip_list = []
+        for x in iprange:
+            ips = IPy.IP(x)
+            ip_list.extend([str(i) for i in ips])
 
-    def __speed_test(self, ip):
-        """PING test
+        print '\tTotal: %s' % len(ip_list)
+        # Write to file
+        path = os.path.join(self.__abspath, 'google.ip')
+        with open(path, 'w') as f:
+            f.writelines('\n'.join(ip_list))
+
+        print '\tSave IP list to file google.ip'
+        return ip_list
+
+    def detect_port(self, ip=None, ports=[], connect_timeout=2):
+        """ return alive ports which was given in the ports-list
         """
+        if not ip or not ports or len(ports) < 1:
+            raise ValueError('Invalidate argument value.')
+        port_list = []
+        socket.setdefaulttimeout(connect_timeout)
+        for p in ports:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                s.connect((ip, int(p)))
+                port_list.append(p)
+                s.close()
+                # s.shutdown(1)
+            except Exception, ex:
+                # print ex
+                pass
+            finally:
+                pass
+            if self.__is_exit:
+                sys.exit(0)
+        return port_list
 
-        abnormal = 99999.0    # abnormal response time
+    def speed_test(self, ip=None, is_win_os=True):
+        """ return the times(second) of PING responsed, otherwise return timeout
+        """
+        timeout = 9999.0
         if not ip:
-            return abnormal
-
-        if self.__os_win:
-            p = subprocess.Popen(
-                ["ping.exe", ip], stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
+            return timeout
+        # if 'windows' in platform.system().lower():
+        if is_win_os:
+            p = subprocess.Popen(["ping.exe", ip], stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE,   stderr=subprocess.PIPE, shell=True)
             out = p.stdout.read()
-            # pattern = re.compile(
-            #   "Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms", re.IGNORECASE)
             pattern = re.compile(r'\s=\s(\d+)ms', re.I)
             m = pattern.findall(out)
             if m and len(m) == 3:
                 return float(m[2])
-        # Linux, MAC or other system
-        else:
-            p = subprocess.Popen(["ping -c4 " + ip],
-                                 stdin=subprocess.PIPE,
-                                 stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE,
-                                 shell=True)
+        else:  # Linux, MAC
+            p = subprocess.Popen(["ping -c4 " + ip], stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE,  stderr=subprocess.PIPE, shell=True)
             out = p.stdout.read()
             out = out.split('\n')[-2]
-            # there is the result if not 100% lost
             if 'avg' in out:
                 out = out.split('/')[4]
                 if out:
                     return float(out)
-        return abnormal
+        return timeout
 
-    def __detect_alive_ip(self):
-        """ Detect alive IP with list self.__source_list
-
-        Args:
-            None
-        """
-
-        self.__alive_list.clear()
-        if len(self.__source_list) == 0:
+    def __get_one_ip(self):
+        self.__g_mutex.acquire()
+        if not self.__source_ip_list or len(self.__source_ip_list) == 0:
+            self.__g_mutex.release()
             return None
+        ip = self.__source_ip_list.pop(0)
+        self.__g_mutex.release()
+        return ip
 
+    def __save_ip(self, ip, avgtime):
+        self.__g_mutex_save.acquire()
+        self.__alive_ip_list[ip] = avgtime
+        total = len(self.__alive_ip_list)
+        self.__g_mutex_save.release()
+        return total
+
+    def __get_total_alive_ip(self):
+        self.__g_mutex_save.acquire()
+        total = len(self.__alive_ip_list)
+        self.__g_mutex_save.release()
+        return total
+
+    def __detect_ip(self):
+        # loop to detect alive IP and opened-port
+        while True:
+            if self.__is_exit:
+                break
+            ip = self.__get_one_ip()
+            total = self.__get_total_alive_ip()
+            if ip and total < self.__total_alive_ip:
+                if '443' in self.detect_port(ip, self.__source_port_list):
+                    t = self.speed_test(ip, self.__is_win_os)
+                    if t <= self.__avgtime:
+                        total = self.__save_ip(ip, t)
+                        print '\tsurvived ip=%-16s time=%-8s [SAVED]' % (ip, t)
+                        if total >= self.__total_alive_ip:
+                            break
+                    elif t > self.__avgtime and t < 9999:
+                        print '\tsurvived ip=%-16s time=%-8s [IGNORE]' % (ip, t)
+            else:
+                break
+
+    def stop_multi_thread(self):
+        self.__is_exit = True
+
+    def start_multi_thread(self, iplist=[], portlist=[], max_threading=10, saveto_file_path='survived.ip'):
+        if not iplist or len(iplist) < 1 or not portlist or len(portlist) < 1 or not saveto_file_path:
+            raise ValueError('ZERO ip in list')
+        max_threading = 5 if max_threading < 5 else max_threading
+        max_threading = 1024 if max_threading > 1024 else max_threading
+        self.__source_ip_list = iplist
+        self.__source_port_list = portlist
+        self.__g_mutex = threading.Lock()
+        self.__g_mutex_save = threading.Lock()
+
+        self.__is_exit = False
+
+        print '-> Searching IPs ...\
+                \n\tit will take several minitues, be patient...\
+                \n\tOR press Ctrl-C to interrupt.\n'
         th_pool = []
-        for i in range(self.__max_threading):
-            th = threading.Thread(target=self.__th_port_detect)
+        for i in range(max_threading):
+            th = threading.Thread(target=self.__detect_ip)
+            th.setDaemon(True)  # important
             th_pool.append(th)
             th.start()
 
-        # for i in range(self.__max_threading):
-        #    threading.Thread.join(th_pool[i])
+        # normally, current thread should waiting for all sub-threads finish it's job and exit.
+        # but the caller can call method stop_multi_thread (this method set self.__is_exit = True)
+        # to send an exit-signal，to ask sub-threads exit gently,
+        # but current thread may take few seconds to wait all sub-thread
+        # exit-signal.
+        # print 'joint all the sub-thread'
+        for t in th_pool:
+            t.join()
 
-        # loop waiting for ctrl-c signal
-        while True:
-            alive = False
-            try:
-                time.sleep(0.5)
-                for i in range(self.__max_threading):
-                    alive = alive or th_pool[i].isAlive()
-                if not alive:
-                    break
-            except KeyboardInterrupt:
-                print ''
-                print '---->>>                  <<<-----'
-                print '---->>>    user cancel   <<<-----'
-                print '---->>>                  <<<-----'
-                self.stop()
-
-        # Save available IPs to file
-        path = os.path.join(self.__abspath, 'alive.ip')
+        # print 'all sub-thread exit'
+        if self.__is_exit:
+            pass
+            # print '\n-->> user interrupt\n'
+        # Save IPs to file
+        path = os.path.join(self.__abspath, 'out')
+        if not os.path.isdir(path):
+            os.mkdir(path)
+        path = os.path.join(path, saveto_file_path)
         arr = {}
-        if len(self.__alive_list) > 0:
-            arr = self.__sort_ip_list_by_time()
-            f = open(path, 'w')
-            for k in arr:
-                f.writelines('%-15s   %-4s \n' % (k[0], k[1]))
-            f.close()
+        if len(self.__alive_ip_list) > 0:
+            arr = sorted(self.__alive_ip_list.items(), key=lambda x: x[1])
+            with open(path, 'w') as f:
+                for k in arr:
+                    f.writelines('%-15s   %-4s \n' % (k[0], k[1]))
 
-        print '-> Total alive IPs = %s ' % len(self.__alive_list)
-        print '-> Save to file [alive.ip]'
+        print '-> Save %s IPs to file %s' % (len(self.__alive_ip_list), saveto_file_path)
         return arr
 
-    def __sort_ip_list_by_time(self):
-        """Sort IP list by time
-        """
-        arr = sorted(self.__alive_list.items(), key=lambda x: x[1])
-        print arr
-        return arr
-
-    def __generate_format_file(self, alive_list):
+    def output_format_file(self, ip_list, output_file):
         """Generate format file : host , goagent proxy.ini
         """
-
-        if not os.path.isdir(self.__out_dir):
-            # shutil.rmtree(self.__out_dir)
-            # os.removedirs(self.__out_dir)
-            os.mkdir(self.__out_dir)
-
-        if not alive_list:
+        outpath = os.path.join(self.__abspath, 'out')
+        if not os.path.isdir(outpath):
+            os.mkdir(outpath)
+        if not ip_list:
             return None
-
-        path = os.path.join(self.__abspath, 'hosts.template')
-        if not os.path.isfile(path):
-            raise NameError('the template file [hosts.template] was missing')
-
-        repeater = 3 if 3 <= len(alive_list) else len(alive_list)
-
-        # host-file format
-        f = open(path, 'r')
-        txt = []
-        try:
-            for line in f:
-                if '{ip}' in line:
-                    txt.append(line.replace('{ip}', alive_list[0][0]))
-                    # for i in range(0, repeater):
-                    #    txt.append(line.replace('{ip}', alive_list[i][0]))
-                elif '{time}' in line:
-                    txt.append(
-                        line.replace(
-                            '{time}',
-                            time.asctime(
-                                time.localtime(
-                                    time.time()))))
-                else:
-                    txt.append(line)
-            f.close()
-            f = open(os.path.join(self.__out_dir, 'hosts'), 'w')
-            f.writelines(''.join(txt))
-        except Exception as e:
-            print 'Error : read/write file error'
-            print e
-        finally:
-            f.close()
-
         # goagent format
-        arr = [x[0] for x in alive_list]
-        txt = '|'.join(arr)
-        f = open(os.path.join(self.__out_dir, 'goagent'), 'w')
-        try:
-            f.writelines(txt)
-        except:
-            print 'Error : read/write file error'
-        finally:
-            f.close()
+        with open(os.path.join(outpath, output_file), 'w') as f:
+            f.writelines(
+                '## Open the config file proxy.ini in folder goagent/local,\n')
+            f.writelines(
+                '## and replace the [iplist] node with the following txt\n')
+            f.writelines('\n\n[iplist]\n')
+            f.writelines('google_cn = %s\n' % '|'.join(ip_list[0:5]))
+            f.writelines('google_hk = %s\n' % '|'.join(ip_list[0:5]))
+            f.writelines('google_talk = %s\n' % '|'.join(ip_list[0:5]))
 
         print '-> format output, save to folder [out]'
 
-    def start(self):
-        """Start to work..
-        """
-
-        if self.__ipsource == 'github':
-            git = self.__get_iplist_from_github(self.__github_url)
-            self.__sort_ip_list(git, None)
-        elif self.__ipsource == 'gspf':
-            spf = self.__get_iplist_by_nslookup()
-            self.__sort_ip_list(None, spf)
-        elif self.__ipsource == 'all':
-            git = self.__get_iplist_from_github(self.__github_url)
-            spf = self.__get_iplist_by_nslookup()
-            self.__sort_ip_list(git, spf)
-        else:
-            iplist = self.__read_local_file(self.__local_ip_file_path)
-            self.__source_list = iplist
-
-        print ' source list total ips %s ' % len(self.__source_list)
-        alist = self.__detect_alive_ip()
-        self.__generate_format_file(alist)
-
-        if self.__is_exit:
-            print '\n == USER CANCEL ==\n'
-        else:
-            print '\n== DONE ==\n'
-
-    def stop(self):
-        self.__is_exit = True
-
-    def __init__(
-            self,
-            ipsource='all',
-            count=10,
-            avgtime=200,
-            maxthreading=10):
-        """Initialize
-
-        Args:
-            ipsource options:
-                1.'github'. Download the file from https://raw.githubusercontent.com/Playkid/Google-IPs/master/README.md
-                2.'gspf'. Query Google's SPF record to retrieve the range of IP address
-                3.'all'. Default option. Use github IP-list file AND query Google SPF.
-                4. A file path. Read a local file that store IPs with one IP in a line
-            count:
-                default value=10, how many IPs you want, It will
-                stop detecting while the amount of alive-IPs >= count.
-            avgtime:
-                default value=150ms, speed test,
-                ignore the IP that PING response average time more than 150ms.
-
-        Return:
-            Class Instance
-        """
-
-        sopt = ('github', 'gspf', 'all')
-        ipsource = ipsource.strip()
-        if not ipsource:
-            self.__ipsource = 'all'
-        elif ipsource in sopt:
-            self.__ipsource = ipsource
-        else:
-            ipsource = ipsource.strip('"')
-            ipsource = ipsource.strip("'")
-            if not os.path.isfile(ipsource):
-                raise 'the path of local source IP file is invalid'
-            else:
-                self.__ipsource = 'file'
-                self.__local_ip_file_path = ipsource
-
-        self.__count = count
-        self.__avgtime = 100 if avgtime <= 100 else avgtime
-        self.__max_threading = maxthreading
-
-        self.__github_url = 'https://raw.githubusercontent.com/Playkid/Google-IPs/master/README.md'
-
+    def __init__(self, t, n):
         if 'windows' in platform.system().lower():
-            self.__os_win = True
+            self.__is_win_os = True
         else:
-            self.__os_win = False
+            self.__is_win_os = False
+        self.__avgtime = t
+        self.__total_alive_ip = n
 
 
-def usage():
+def print_usage():
     print u"\
     Usage:\n \
         findip.py [-s string] [-t|-n|-m number] [-h|--help] \n\
@@ -637,66 +390,102 @@ def usage():
 
 
 if __name__ == '__main__':
-    t = 250
-    n = 5
-    m = 20
-    s = ''
+    t = 500
+    n = 3
+    m = 10
+    url = ''
+    f = ''
+    use_a = False
+    use_g = False
+    fbase = os.path.abspath(os.path.dirname(sys.argv[0]))
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "t:n:m:s:h", ["help"])
-        # print os.getcwd()
-        #path = os.path.abspath(os.path.dirname(sys.argv[0]))
-        arr = ('-t', '-n', '-m', '-h', '-s', '--help')
-        for a in args:
-            if a not in arr:
-                usage()
-                sys.exit(1)
-
+        opts, args = getopt.getopt(sys.argv[1:], "a:g:f:url:t:n:m:h", ["help"])
         for opt, arg in opts:
-            if opt not in opt:
-                usage()
-                sys.exit(1)
             if opt == '-h' or opt == '--help':
-                usage()
-                sys.exit(1)
+                print_usage()
+                sys.exit(0)
             if opt == '-t':
                 t = int(arg)
             if opt == '-n':
                 n = int(arg)
             if opt == '-m':
                 m = int(arg)
-            if opt == '-s':
-                s = arg
-    # except getopt.GetoptError, ValueError:
+            if opt == '-url':
+                url = arg
+            if opt == '-g':
+                use_g = True
+            if opt == '-f':
+                f = arg
+                if '/' not in f and '\\' not in f:
+
+                    f = os.path.join(fbase, f)
+                if not os.path.isfile(f):
+                    print 'Error: file not found.\n'
+                    print_usage()
+                    sys.exit(0)
+            if opt == '-a':
+                use_a = True
     except:
-        print(">> I don't get It!\n")
-        usage()
-        sys.exit(1)
+        print_usage()
+        sys.exit(0)
 
-    fip = FindIP(s, n, t, m)
-    fip.start()
+    l1 = []
+
+    fip = FindIP(t, n)
+
+    p = os.path.join(fbase, 'google.ip')
+    if os.path.isfile(p):
+        l1 = fip.get_iplist_from_local_file(p)
+    else:
+        l1 = fip.get_iplist_by_nslookup()
+    random.shuffle(l1)
+    saveto_file_path = 'survived.ip'
+    th = threading.Thread(
+        target=fip.start_multi_thread, args=(l1, ['443'], m, saveto_file_path))
+    th.setDaemon(True)
+    th.start()
+
+    #df = 'https://raw.githubusercontent.com/Playkid/Google-IPs/master/README.md'
+    #fip = FindIP(t, n)
+    ## iplist2 = fip.get_iplist_from_web(df)
+    #iplist1 = fip.get_iplist_from_local_file(f)
+    ## iplist3 = fip.get_iplist_by_nslookup()
+#
+    # random.shuffle(iplist1)
+
+    # print fip.detect_port('seili.net',['80','443'])
+
+#
+    while True:
+        alive = False
+        try:
+            time.sleep(0.5)
+            if not th.isAlive():
+                break
+        except KeyboardInterrupt:
+            fip.stop_multi_thread()
+            print '---->>>    user interrupt   <<<-----'
+            th.join(3)
+            break
+
+    out = os.path.join(fbase, 'out')
+    p = os.path.join(out, saveto_file_path)
+    if not os.path.isfile(p):
+        raise EOFError(
+            'the output file (%s) does not exist') % saveto_file_path
+
+    survived_ips = []
+    with open(p, 'r') as f:
+        for line in f:
+            survived_ips.append(line[0:16].strip())
+
+    print '-> format output...'
+    fip.output_format_file(survived_ips, 'for.goagent.txt')
+    #p = os.path.join(out, 'for.goagent.txt')
+    # with open(p, 'w') as f:
+    #    f.writelines('|'.join(survived_ips[0:5]))
+
+    print '-> FINISHED '
 
 
-#name = 'log'
-#h = logging.getLogger(name)
-#
-#fh = logging.FileHandler('run.log')
-# fh.setLevel(logging.DEBUG)
-#
-#console = logging.StreamHandler()
-# console.setLevel(logging.DEBUG)
-#
-# formatter = logging.Formatter(
-# '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-# formatter = logging.Formatter(
-#    '[%(levelname)s] - %(asctime)s - %(message)s')
-#
-# fh.setFormatter(formatter)
-# console.setFormatter(formatter)
-#
-# h.addHandler(fh)
-# h.addHandler(console)
-#h.fatal('initialize log...')
-#
-#L = logging.getLogger('log')
-# print L
-# L.info('fck')
+# = 'https://raw.githubusercontent.com/Playkid/Google-IPs/master/README.md'

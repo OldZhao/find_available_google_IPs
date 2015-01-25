@@ -1,11 +1,11 @@
 Find available Google's IPs 
 ====
 
-A useful tool that helping to find available Google's IPs.
+A useful tool that helping to find survived google's IPs.
 
 If you are living in China, you known what I mean.
 
-It works well with `Windows` and `Debian`, not yet tested on other platform.
+It works well with `Windows`, `Debian` and `MAC`, not yet tested on other platform.
 
 
 How to start
@@ -14,7 +14,7 @@ How to start
 
 <https://www.python.org/download/releases/2.7.8/>
 
-please use python 2.7.x
+please use PY2.x, not yet tested with PY3.0
 
 2.run **python findip.py**
 
@@ -22,15 +22,17 @@ type `findip.py -h` or `findip.py --help` for help
 
 3.when It finished, check the result in folder **out**
 
-     ├─out
-         ├─hosts    =>  for the hosts file of your system 
-         └─goagent  =>  for the node [iplist] of proxy.ini in goagent
+
 
 If there are enough alive-ips for you, press `Ctrl-c` to interrupt.
 
+
+
+
+
 Others
 ----
-This source calls system program `PING` and `nslookup`, if things go wrong, you should check that have they been installed?
+null
 
 Credits
 ----
