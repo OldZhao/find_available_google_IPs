@@ -332,9 +332,11 @@ class FindIP(object):
         # goagent format
         with open(os.path.join(outpath, output_file), 'w') as f:
             f.writelines(
-                '## Open the config file proxy.ini in folder goagent/local,\n')
+                '## Open the config file proxy.ini in the folder goagent/local,\n')
             f.writelines(
                 '## and replace the [iplist] node with the following txt\n')
+            f.writelines(
+                '## DO NOT MODIFY the line (google_ipv6 = xxx:xxx::...) if it exist. \n')
             f.writelines('\n\n[iplist]\n')
             f.writelines('google_cn = %s\n' % '|'.join(ip_list[0:5]))
             f.writelines('google_hk = %s\n' % '|'.join(ip_list[0:5]))
@@ -354,24 +356,16 @@ class FindIP(object):
 def print_usage():
     print u"\
     Usage:\n \
-        findip.py [-s string] [-t|-n|-m number] [-h|--help] \n\
+        findip.py [-t|-n|-m number] [-h|--help] \n\
     \n\
     For example:\n\
         findip.py \n\
         OR \n\
-        findip.py -s all -t 250 -n 5\n\
+        findip.py -t 250 -n 5\n\
         OR \n\
-        findip.py -s c:/ip.txt -t 200 -n 5 -m 20 \n\
-        OR \n\
-        findip.py -s \"c:/ip2.txt\" \n\
+        findip.py -t 200 -n 5 -m 20 \n\
     \n\
     Options:\n\
-        -s : source of IP list, \n\
-             'github'. Download IP list from github.com \n\
-             'gspf'. Query Google's SPF record to retrieve IP range \n\
-             'all'. Default option. Use github IP-list AND query Google SPF. \n\
-             'file-path'. Read a local file that store IPs with one IP in a line \n\
-                    Use quotation mark if the path contains blank \n\
         -t : default=200, the average time(ms) of PING test response, \n\
              the one >=200 will be ignore.\n\
         -n : default=5, total of available IPs that you want.\n\
