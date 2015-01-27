@@ -2,21 +2,22 @@
 # -*- coding:utf-8 -*-
 
 """
-A useful tool that helping to find survived google's IPs.
+A useful tool to find out the survived IP of google in TIANCHAO.
 
-Google was blocked randomly and DNS-polluted by the GOV of TIANCHAO since
-many years ago, and it getting worst now. It's very difficult to visit
+Google was blocked randomly and DNS Poisoning by the GFW of TIANCHAO since
+many years ago, and it's getting worse now. It's very difficult to visit
 google website inside the WALL. Fortunately, not all of the IPs were in the
 black list of THE GREAT FIRE WALL. With shattered hopes, we try to find out
 the IP which is survived if we're lucky enough.
 
-Anyway, THE BEST WAY to get through the WALL is using a VPN or PROXY.
+Anyway, THE BEST WAY to get through the WALL is using a VPN or a PROXY.
 (e.g: shadowsocks)
+And THE BEST of THE BEST is ...
 
 "Freedom has many difficulties and democracy is not perfect,
 but we have never had to put a wall up to keep our people in,
 to prevent them from leaving us."
---1963.6.25
+-- John F. Kennedy 1963.6.25
 
 Further Information might be available at:
 https://github.com/scymen/find_available_google_IPs
@@ -48,7 +49,7 @@ class FindIP(object):
     __source_ip_list = []
     __source_port_list = []
     __total_alive_ip = 3
-    __avgtime = 500
+    __avgtime = (0, 500)
     __alive_ip_list = {}  # key=ip,value=[avg-time,opened-ports]
     __is_exit = False  # multi-threads exit-signal
     __g_mutex = None  # threading.Lock()
@@ -200,6 +201,24 @@ class FindIP(object):
                 sys.exit(0)
         return port_list
 
+    def detect_http_ssl(self, ip=None, connect_timeout=2):
+        """ return True if connect successed
+        """
+        if not ip:
+            return False
+        c = httplib.HTTPSConnection(ip, timeout=connect_timeout)
+        try:
+            c.request("GET", "/")
+            response = c.getresponse()
+            #result = str(response.status)+' ,'+response.reason
+            if 200 == response.status:
+                return True
+            else:
+                return False
+        except Exception, ex:
+            return False
+            # print 'error',ex
+
     def speed_test(self, ip=None, is_win_os=True):
         """ return the times(second) of PING responsed, otherwise return timeout
         """
@@ -256,14 +275,19 @@ class FindIP(object):
             ip = self.__get_one_ip()
             total = self.__get_total_alive_ip()
             if ip and total < self.__total_alive_ip:
-                if '443' in self.detect_port(ip, self.__source_port_list):
+                # if '443' in self.detect_port(ip, self.__source_port_list):
+                if self.detect_http_ssl(ip):
+                    # sometimes port 443 is opened of an alive IP, but it may not
+                    # service as a web server(maybe mail server), so we can't visit
+                    # the web site via alive IP, we have to check the http-ssl
+                    # connection
                     t = self.speed_test(ip, self.__is_win_os)
-                    if t <= self.__avgtime:
+                    if t >= self.__avgtime[0] and t <= self.__avgtime[1]:
                         total = self.__save_ip(ip, t)
                         print '\tsurvived ip=%-16s time=%-8s [SAVED]' % (ip, t)
                         if total >= self.__total_alive_ip:
                             break
-                    elif t > self.__avgtime and t < 9999:
+                    else:
                         print '\tsurvived ip=%-16s time=%-8s [IGNORE]' % (ip, t)
             else:
                 break
@@ -321,7 +345,7 @@ class FindIP(object):
         print '-> Save %s IPs to file %s' % (len(self.__alive_ip_list), saveto_file_path)
         return arr
 
-    def output_format_file(self, ip_list, output_file):
+    def output_format_file(self, ip_list, output_file, n=5):
         """Generate format file : host , goagent proxy.ini
         """
         outpath = os.path.join(self.__abspath, 'out')
@@ -338,9 +362,9 @@ class FindIP(object):
             f.writelines(
                 '## DO NOT MODIFY the line (google_ipv6 = xxx:xxx::...) if it exist. \n')
             f.writelines('\n\n[iplist]\n')
-            f.writelines('google_cn = %s\n' % '|'.join(ip_list[0:5]))
-            f.writelines('google_hk = %s\n' % '|'.join(ip_list[0:5]))
-            f.writelines('google_talk = %s\n' % '|'.join(ip_list[0:5]))
+            f.writelines('google_cn = %s\n' % '|'.join(ip_list[0:n]))
+            f.writelines('google_hk = %s\n' % '|'.join(ip_list[0:n]))
+            f.writelines('google_talk = %s\n' % '|'.join(ip_list[0:n]))
 
         print '-> format output, save to folder [out]'
 
@@ -354,104 +378,118 @@ class FindIP(object):
 
 
 def print_usage():
-    print u"\
+    print u"\n\
     Usage:\n \
-        findip.py [-t|-n|-m number] [-h|--help] \n\
+        findip.py [-t|-n|-m number] [-t from:to] \n\
+                  [-u url] [-gGD] [-h|--help] \n\
     \n\
     For example:\n\
         findip.py \n\
-        OR \n\
-        findip.py -t 250 -n 5\n\
-        OR \n\
-        findip.py -t 200 -n 5 -m 20 \n\
+        findip.py -u http://abc.com/ip_in_web.html -D\n\
+        findip.py -f 'my_ip_list.txt' -g\n\
+        findip.py -t 200:500 -n 5 -m 20 \n\
     \n\
     Options:\n\
-        -t : default=200, the average time(ms) of PING test response, \n\
-             the one >=200 will be ignore.\n\
-        -n : default=5, total of available IPs that you want.\n\
-        -m : default=20, max number of threading to work.\n\
-        -h|--help: print usage\n\
+        -t : the average time(ms) of PING test response, \n\
+             a number or a range like 100:300.\n\
+        -n : total of available IPs that you want.\n\
+        -m : max number of threading to work.\n\
+        -f : file path, read a localfile which contains ip list.\n\
+        -u : url of web site which contains ipaddress.\n\
+        -D : switch, DO NOT detect IP and port, \n\
+             use with -u,it meams download ip list only \n\
+        -g : switch, use local file 'google.ip' .\n\
+        -G : switch, query google SPF record to retrieve new IP list\n\
+        -h|--help: print manual\n\
         \n\
     How to stop: \n\
-        press ctrl-c  \n\
-        It will delay few seconds to exit all the threads. \n\
+        press ctrl-C  \n\
+        \n\
     Output:\n\
-        the results are in the folder 'out' \n\
-        ├─out\n\
-           ├─hosts    =>  update the hosts file of your system \n\
-           └─goagent  =>  for the node [iplist] of proxy.ini in goagent\n\
+        check the results in the folder 'out' \n\
     "
 
 
 if __name__ == '__main__':
-    t = 500
+    t = (0, 500)
     n = 3
-    m = 10
-    url = ''
-    f = ''
-    use_a = False
+    m = 20
+    url = None
+    f = None
     use_g = False
+    use_G = False
+    use_D = False
     fbase = os.path.abspath(os.path.dirname(sys.argv[0]))
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "a:g:f:url:t:n:m:h", ["help"])
+        opts, args = getopt.getopt(sys.argv[1:], "f:u:t:n:m:gGhD", ["help"])
         for opt, arg in opts:
             if opt == '-h' or opt == '--help':
                 print_usage()
                 sys.exit(0)
             if opt == '-t':
-                t = int(arg)
+                if ':' in arg:
+                    t = tuple(int(x) for x in arg.split(':'))
+                    if t[0]>= t[1]:
+                        raise ValueError(" '-t' value error")
+                else:
+                    if int(arg) < 1:
+                        raise ValueError(" '-t' value is a positive integer")
+                    t = (0, int(arg))
             if opt == '-n':
                 n = int(arg)
             if opt == '-m':
                 m = int(arg)
-            if opt == '-url':
+            if opt == '-u':
                 url = arg
             if opt == '-g':
                 use_g = True
+            if opt == '-G':
+                use_G = True
             if opt == '-f':
                 f = arg
                 if '/' not in f and '\\' not in f:
-
                     f = os.path.join(fbase, f)
                 if not os.path.isfile(f):
-                    print 'Error: file not found.\n'
-                    print_usage()
-                    sys.exit(0)
-            if opt == '-a':
-                use_a = True
-    except:
+                    raise Exception(" file not found")
+            if opt == '-D':
+                use_D = True
+    except Exception, ex:
+        # except getopt.GetoptError:
+        print ex
         print_usage()
         sys.exit(0)
 
-    l1 = []
+    iplist = []
 
     fip = FindIP(t, n)
 
-    p = os.path.join(fbase, 'google.ip')
-    if os.path.isfile(p):
-        l1 = fip.get_iplist_from_local_file(p)
-    else:
-        l1 = fip.get_iplist_by_nslookup()
-    random.shuffle(l1)
+    if url:
+        iplist.extend(fip.get_iplist_from_web(url))
+    if f:
+        iplist.extend(fip.get_iplist_from_local_file(f))
+    if use_G:
+        os.remove(os.path.join(fbase, 'google.ip'))
+        use_g = True
+    if use_g or (not url and not f):
+        p = os.path.join(fbase, 'google.ip')
+        if os.path.isfile(p):
+            iplist.extend(fip.get_iplist_from_local_file(p))
+        else:
+            iplist.extend(fip.get_iplist_by_nslookup())
+
+    print 'lenghth=', len(iplist)
+    if use_D:
+        print '-> FINISHED'
+        sys.exit(0)
+
+    random.shuffle(iplist)
     saveto_file_path = 'survived.ip'
     th = threading.Thread(
-        target=fip.start_multi_thread, args=(l1, ['443'], m, saveto_file_path))
+        target=fip.start_multi_thread, args=(iplist, ['443'], m, saveto_file_path))
     th.setDaemon(True)
     th.start()
 
-    #df = 'https://raw.githubusercontent.com/Playkid/Google-IPs/master/README.md'
-    #fip = FindIP(t, n)
-    ## iplist2 = fip.get_iplist_from_web(df)
-    #iplist1 = fip.get_iplist_from_local_file(f)
-    ## iplist3 = fip.get_iplist_by_nslookup()
-#
-    # random.shuffle(iplist1)
-
-    # print fip.detect_port('seili.net',['80','443'])
-
-#
     while True:
-        alive = False
         try:
             time.sleep(0.5)
             if not th.isAlive():
@@ -473,11 +511,9 @@ if __name__ == '__main__':
         for line in f:
             survived_ips.append(line[0:16].strip())
 
+    random.shuffle(survived_ips)
     print '-> format output...'
     fip.output_format_file(survived_ips, 'for.goagent.txt')
-    #p = os.path.join(out, 'for.goagent.txt')
-    # with open(p, 'w') as f:
-    #    f.writelines('|'.join(survived_ips[0:5]))
 
     print '-> FINISHED '
 

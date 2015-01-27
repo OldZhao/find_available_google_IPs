@@ -65,20 +65,36 @@ import urllib
 import httplib
 import socket
 
-h1='64.233.189.176'
+h1='216.58.220.5'
+h1='173.194.59.198'
+h1='72.14.246.106'
+h1='1.179.250.39'
 h2='baidu.com'
-h3='seili.net'
-port =4433
+port =443
 timeout=4
 t1 = time.time()
-socket.setdefaulttimeout(3)
+socket.setdefaulttimeout(timeout)
 s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 try:
     s.connect((h1,port))
     s.shutdown(2)
     print '%d is open' % port
 except:
-    print '%d is down' % port
+    print '%d is down' % port  
+
+c = httplib.HTTPSConnection(h1, timeout=3)
+print 'connect'
+try:
+    c.request("GET", "/")
+    response = c.getresponse()
+    if 404==response.status:
+        print 'yes'
+    result = str(response.status)+' ,'+response.reason
+    print result
+except Exception ,ex:
+    print 'error',ex
+
+
 t2 = time.time()
 print '\n time1=' , (t2 - t1)
 
