@@ -162,6 +162,10 @@ class FindIP(object):
             return None
         else:
             print iprange
+            path = os.path.join(self.__abspath, 'google.ip')
+            with open(path, 'w') as f:
+                f.writelines('\n'.join(iprange))
+
         # thirdly, caculate ip list with the ip range
         print '\tCaculate IP list:'
         ip_list = []
@@ -171,7 +175,7 @@ class FindIP(object):
 
         print '\tTotal: %s' % len(ip_list)
         # Write to file
-        path = os.path.join(self.__abspath, 'google.ip')
+        path = os.path.join(self.__abspath, 'google.ip.txt')
         with open(path, 'w') as f:
             f.writelines('\n'.join(ip_list))
 
@@ -414,6 +418,7 @@ if __name__ == '__main__':
     t = (0, 500)
     n = 3
     m = 20
+    o = 5
     url = None
     f = None
     use_g = False
@@ -421,7 +426,7 @@ if __name__ == '__main__':
     use_D = False
     fbase = os.path.abspath(os.path.dirname(sys.argv[0]))
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "f:u:t:n:m:gGhD", ["help"])
+        opts, args = getopt.getopt(sys.argv[1:], "f:u:t:n:m:o:gGhD", ["help"])
         for opt, arg in opts:
             if opt == '-h' or opt == '--help':
                 print_usage()
@@ -429,7 +434,7 @@ if __name__ == '__main__':
             if opt == '-t':
                 if ':' in arg:
                     t = tuple(int(x) for x in arg.split(':'))
-                    if t[0]>= t[1]:
+                    if t[0] >= t[1]:
                         raise ValueError(" '-t' value error")
                 else:
                     if int(arg) < 1:
@@ -439,6 +444,8 @@ if __name__ == '__main__':
                 n = int(arg)
             if opt == '-m':
                 m = int(arg)
+            if opt == '-o':
+                o = int(arg)
             if opt == '-u':
                 url = arg
             if opt == '-g':
@@ -468,7 +475,9 @@ if __name__ == '__main__':
     if f:
         iplist.extend(fip.get_iplist_from_local_file(f))
     if use_G:
-        os.remove(os.path.join(fbase, 'google.ip'))
+        p = os.path.join(fbase, 'google.ip')
+        if os.path.isfile(p):
+            os.remove(p)
         use_g = True
     if use_g or (not url and not f):
         p = os.path.join(fbase, 'google.ip')
@@ -477,7 +486,7 @@ if __name__ == '__main__':
         else:
             iplist.extend(fip.get_iplist_by_nslookup())
 
-    print 'lenghth=', len(iplist)
+    # print 'lenghth=', len(iplist)
     if use_D:
         print '-> FINISHED'
         sys.exit(0)
@@ -513,7 +522,7 @@ if __name__ == '__main__':
 
     random.shuffle(survived_ips)
     print '-> format output...'
-    fip.output_format_file(survived_ips, 'for.goagent.txt')
+    fip.output_format_file(survived_ips, 'for.goagent.txt', o)
 
     print '-> FINISHED '
 
