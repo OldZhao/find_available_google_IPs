@@ -69,18 +69,45 @@ h1='216.58.220.5'
 h1='173.194.59.198'
 h1='72.14.246.106'
 h1='1.179.250.39'
-h2='baidu.com'
+h1='baidu.com'
+h1='http://mail.qq.com/cgi-bin/loginpage'
 port =443
 timeout=4
+aip=167773121
 t1 = time.time()
-socket.setdefaulttimeout(timeout)
-s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-try:
-    s.connect((h1,port))
-    s.shutdown(2)
-    print '%d is open' % port
-except:
-    print '%d is down' % port  
+#socket.setdefaulttimeout(timeout)
+#s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+#try:
+#    s.connect((h1,port))
+#    s.shutdown(2)
+#    print '%d is open' % port
+#except:
+#    print '%d is down' % port   208.117.233.10
+#64.15.126.242
+import urllib2
+t1=time.time()
+x=urllib2.urlopen( 'https://64.15.126.242',None,5)
+c= x.read()
+t2=time.time()
+print 'time=',t2-t1
+if 'google.com' in c:
+    print 'yes'
+    print 'time=',time.time()-t2
+else :
+    print 'no'
+print x.getcode()
+
+
+ip='208.117.233.10'
+ip='64.15.126.242'
+c=httplib.HTTPSConnection(ip, 30)
+response = c.getresponse()
+result = str(response.status)+' ,'+response.reason
+print result
+
+sys.exit(0)
+
+
 
 c = httplib.HTTPSConnection(h1, timeout=3)
 print 'connect'
@@ -92,7 +119,7 @@ try:
     result = str(response.status)+' ,'+response.reason
     print result
 except Exception ,ex:
-    print 'error',ex
+    print 'error->',ex
 
 
 t2 = time.time()

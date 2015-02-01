@@ -24,7 +24,7 @@ https://github.com/scymen/find_available_google_IPs
 """
 
 
-import urllib
+import urllib2
 import os
 import os.path
 import sys
@@ -182,6 +182,21 @@ class FindIP(object):
         print '\tSave IP list to file google.ip'
         return ip_list
 
+    def get_iplist_from_unofficial(self):
+        print '-> get ip list from UNOFFICIAL source...\n\tbe patient...'
+        import args
+        a = args.args()
+        iplist = []
+        i1, i2 = a.test_args()
+        for i in xrange(0, len(i1)):
+            p = '0x%s/%s' % (i1[i], i2[i])
+            ip = IPy.IP(p)
+            for x in ip:
+                iplist.append(str(x))
+        iplist = {}.fromkeys(iplist).keys()
+        print '\tget %s IPs' % len(iplist)
+        return iplist
+
     def detect_port(self, ip=None, ports=[], connect_timeout=2):
         """ return alive ports which was given in the ports-list
         """
@@ -216,6 +231,24 @@ class FindIP(object):
             response = c.getresponse()
             #result = str(response.status)+' ,'+response.reason
             if 200 == response.status:
+                return True
+            else:
+                return False
+        except Exception, ex:
+            return False
+            # print 'error',ex
+
+    def detect_http(self, ip=None, connect_timeout=2, via_ssl=True):
+        """ return True if connect successed
+        """
+        if not ip:
+            return False
+        try:
+            url = 'https://%s' % ip
+            if not via_ssl:
+                url = 'http://%s' % ip
+            c = urllib2.urlopen(url, None, connect_timeout)
+            if 200 == c.getcode() and '<title>Google</title>' in c.read():
                 return True
             else:
                 return False
@@ -280,7 +313,8 @@ class FindIP(object):
             total = self.__get_total_alive_ip()
             if ip and total < self.__total_alive_ip:
                 # if '443' in self.detect_port(ip, self.__source_port_list):
-                if self.detect_http_ssl(ip):
+                # if self.detect_http_ssl(ip):
+                if self.detect_http(ip):
                     # sometimes port 443 is opened of an alive IP, but it may not
                     # service as a web server(maybe mail server), so we can't visit
                     # the web site via alive IP, we have to check the http-ssl
@@ -383,50 +417,56 @@ class FindIP(object):
 
 def print_usage():
     print u"\n\
-    Usage:\n \
-        findip.py [-t|-n|-m number] [-t from:to] \n\
-                  [-u url] [-gGD] [-h|--help] \n\
+Usage:\n \
+    findip.py [-t|-n|-m|-o number] [-t from:to] \n\
+              [-f file-path] \n\
+              [-u url] [-agGD] [-h|--help] \n\
+\n\
+For example:\n\
+    findip.py  \n\
+    findip.py -u http://abc.com/ip_in_website.html \n\
+    findip.py -f 'my_ip_list.txt' -g\n\
+    findip.py -t 200:500 -n 5 -m 20 \n\
+\n\
+Options:\n\
+    -t : the average time(ms) of PING test response,\n\
+         a number or a range like 100:300.\n\
+    -n : total of available IPs that you want.\n\
+    -m : max number of sub-threads to work.\n\
+    -f : file path, read a localfile which contains ip list.\n\
+    -u : the url of web site which contains ipaddress.\n\
+    -D : switch open = DO NOT detect IP and opned-port. \n\
+         e.g: findip.py -u http://abc.com/ip_in_web.html -D\n\
+         it means that get the IPs from the website and save to local-file.\n\
+    -g : switch open = use local file 'google.ip'. \n\
+    -G : switch open = query google SPF record to retrieve new IP list.\n\
+    -o : the numbers of ip to output to the format file. \n\
+    -a : unofficial, switch open = seaching ip witch another source.\n\
+         last shot if you get NONE survived IP .\n\
+    -h|--help: print manual.\n\
     \n\
-    For example:\n\
-        findip.py \n\
-        findip.py -u http://abc.com/ip_in_web.html -D\n\
-        findip.py -f 'my_ip_list.txt' -g\n\
-        findip.py -t 200:500 -n 5 -m 20 \n\
+How to stop: \n\
+    press ctrl-C  \n\
     \n\
-    Options:\n\
-        -t : the average time(ms) of PING test response, \n\
-             a number or a range like 100:300.\n\
-        -n : total of available IPs that you want.\n\
-        -m : max number of threading to work.\n\
-        -f : file path, read a localfile which contains ip list.\n\
-        -u : url of web site which contains ipaddress.\n\
-        -D : switch, DO NOT detect IP and port, \n\
-             use with -u,it meams download ip list only \n\
-        -g : switch, use local file 'google.ip' .\n\
-        -G : switch, query google SPF record to retrieve new IP list\n\
-        -h|--help: print manual\n\
-        \n\
-    How to stop: \n\
-        press ctrl-C  \n\
-        \n\
-    Output:\n\
-        check the results in the folder 'out' \n\
-    "
+Output:\n\
+    check the results in the folder 'out' \n\
+"
 
 
 if __name__ == '__main__':
     t = (0, 500)
     n = 3
-    m = 20
+    m = 30
     o = 5
     url = None
     f = None
     use_g = False
     use_G = False
     use_D = False
+    use_a = False
     fbase = os.path.abspath(os.path.dirname(sys.argv[0]))
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "f:u:t:n:m:o:gGhD", ["help"])
+        opts, args = getopt.getopt(sys.argv[1:], "f:u:t:n:m:o:agGhD", ["help"])
         for opt, arg in opts:
             if opt == '-h' or opt == '--help':
                 print_usage()
@@ -452,6 +492,8 @@ if __name__ == '__main__':
                 use_g = True
             if opt == '-G':
                 use_G = True
+            if opt == '-a':
+                use_a = True
             if opt == '-f':
                 f = arg
                 if '/' not in f and '\\' not in f:
@@ -479,12 +521,15 @@ if __name__ == '__main__':
         if os.path.isfile(p):
             os.remove(p)
         use_g = True
-    if use_g or (not url and not f):
-        p = os.path.join(fbase, 'google.ip')
-        if os.path.isfile(p):
-            iplist.extend(fip.get_iplist_from_local_file(p))
-        else:
-            iplist.extend(fip.get_iplist_by_nslookup())
+    if not use_a:
+        if use_g or (not url and not f):
+            p = os.path.join(fbase, 'google.ip')
+            if os.path.isfile(p):
+                iplist.extend(fip.get_iplist_from_local_file(p))
+            else:
+                iplist.extend(fip.get_iplist_by_nslookup())
+    else:
+        iplist.extend(fip.get_iplist_from_unofficial())
 
     # print 'lenghth=', len(iplist)
     if use_D:
